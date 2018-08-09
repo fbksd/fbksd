@@ -1,0 +1,6 @@
+# tmp files
+*~
+CMakeLists.txt.user*
+
+# Doxygen build folder:
+doxygen
