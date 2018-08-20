@@ -2,70 +2,41 @@
 #define SCENEFILE_H
 
 #include "fbksd/core/SceneInfo.h"
-#include <string>
-#include <map>
-#include <vector>
-#include <iostream>
-#include <memory>
 
-class QFile;
-class QDomDocument;
-class QDomElement;
-class QDomNode;
-class QString;
+#include <QString>
+#include <QVector>
 
 
-class BenchmarkConfig
+struct BenchmarkConfig
 {
 public:
-    void addRenderingServer(const std::string& name,
-                            const std::string& path,
-                            int port);
-
-    void addScene(int sceneID,
-                  const std::string& name,
-                  const std::string& path,
-                  std::vector<int> spps,
-                  std::vector<int> sppsIDs,
-                  SceneInfo description);
-
     struct Scene
     {
-        int ID;
-        std::string name;
-        std::string path;
-        std::vector<int> spps;
-        std::vector<int> sppsIDs;
+        QString name;
+        QString path;
+        QVector<int> spps;
         SceneInfo info;
     };
 
     struct Renderer
     {
-        std::string name;
-        std::string path;
+        QString name;
+        QString path;
         int port;
-        std::vector<Scene> scenes;
+        QVector<Scene> scenes;
     };
 
-    std::vector<Renderer> renderers;
+    QVector<Renderer> renderers;
 };
 
 
 /**
- * \brief The CfgParser class
+ * @brief Loads data from the configuration file.
  *
- * \ingroup BenchmarkServer
+ * @returns A BenchmarkConfig object with the data.
+ * @throws std::runtime_error in case of error reading the configuration file.
  */
-class CfgParser
-{
-public:
-    static std::unique_ptr<BenchmarkConfig> load(const std::string& filename);
+BenchmarkConfig loadConfig(const QString& filePath);
 
-private:
-    static void parseBenchmarkSettings(const QDomElement &element, BenchmarkConfig *config);
-    static void parseRenderingServer(const QDomElement &element, BenchmarkConfig *config);
-    static void parseScenes(const QDomElement &element, BenchmarkConfig *config);
-    static SceneInfo parseSceneInfo(const QDomElement &config);
-};
 
 #endif // SCENEFILE_H

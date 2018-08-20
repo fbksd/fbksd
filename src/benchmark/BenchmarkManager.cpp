@@ -4,6 +4,7 @@
 #include "RenderClient.h"
 #include "fbksd/renderer/samples.h"
 
+#include <iostream>
 #include <memory>
 #include <QDebug>
 #include <QProcess>
@@ -86,8 +87,12 @@ void BenchmarkManager::runScene(const QString& rendererPath, const QString& scen
 
 void BenchmarkManager::runAll(const QString& configPath, const QString& filterPath, const QString& resultPath, int n, bool resume)
 {
-    config = CfgParser::load(configPath.toStdString());
-    if(!config) return;
+    try{ config = loadConfig(configPath); }
+    catch(const std::runtime_error& error)
+    {
+        qCritical() << error.what();
+        return;
+    }
 
     // Start the benchmark server
     BenchmarkServer benchmarkServer(this);
@@ -96,9 +101,9 @@ void BenchmarkManager::runAll(const QString& configPath, const QString& filterPa
     std::string filterName = QFileInfo(filterPath).baseName().toStdString();
 
     // Launch the ASR app for each renderer, scene and spp.
-    for(currentRenderIndex = 0; currentRenderIndex < config->renderers.size(); ++currentRenderIndex)
+    for(currentRenderIndex = 0; currentRenderIndex < config.renderers.size(); ++currentRenderIndex)
     {
-        const auto& renderAtt = config->renderers[currentRenderIndex];
+        const auto& renderAtt = config.renderers[currentRenderIndex];
 
         for(currentSceneIndex = 0; currentSceneIndex < renderAtt.scenes.size(); ++currentSceneIndex)
         {
@@ -115,7 +120,7 @@ void BenchmarkManager::runAll(const QString& configPath, const QString& filterPa
                     // If the log file exists and does not indicate a crash, skip to next iteration
                     int spp = scene.spps[currentSppIndex];
                     //TODO: support the case with multiple iterations
-                    QString baseFilename = QString::fromStdString(scene.name) +
+                    QString baseFilename = scene.name +
                             "/" + QString::number(spp) + "_0_log.json";
                     QFileInfo fileInfo(resultPath, baseFilename);
                     if(fileInfo.exists())
@@ -130,7 +135,7 @@ void BenchmarkManager::runAll(const QString& configPath, const QString& filterPa
                             if(!obj.contains("aborted") || !obj["aborted"].toBool())
                             {
                                 std::cout << "Filter: " << filterName << ". ";
-                                std::cout << "Scene: " << scene.name << ". ";
+                                std::cout << "Scene: " << scene.name.toStdString() << ". ";
                                 std::cout << "SPP: " << scene.spps[currentSppIndex] << ". ";
                                 std::cout << "Iteration: 1/" << n << ". (skipping: already has results saved)" << std::endl;
                                 continue;
@@ -144,7 +149,7 @@ void BenchmarkManager::runAll(const QString& configPath, const QString& filterPa
                 {
                     startRenderer = false;
 #ifndef MANUAL_RENDERER
-                    startProcess(QString::fromStdString(renderAtt.path), QString::fromStdString(scene.path), renderingServer);
+                    startProcess(renderAtt.path, scene.path, renderingServer);
 #endif
                     // Start the render client
                     renderClient.reset(new RenderClient(this, 2227));
@@ -163,7 +168,7 @@ void BenchmarkManager::runAll(const QString& configPath, const QString& filterPa
                 for(int i = 0; i < n; ++i)
                 {
                     std::cout << "Filter: " << filterName << ". ";
-                    std::cout << "Scene: " << scene.name << ". ";
+                    std::cout << "Scene: " << scene.name.toStdString() << ". ";
                     std::cout << "SPP: " << scene.spps[currentSppIndex] << ". ";
                     std::cout << "Iteration: " << i+1 << "/" << n << "." << std::endl;
 
@@ -179,7 +184,7 @@ void BenchmarkManager::runAll(const QString& configPath, const QString& filterPa
 
                     ProcessExitStatus exitType = startEventLoop(&renderingServer, &filterApp);
                     int spp = scene.spps[currentSppIndex];
-                    QString sceneName = QString::fromStdString(scene.name);
+                    QString sceneName = scene.name;
                     QString prevCurrentDir = QDir::currentPath();
                     QDir::setCurrent(resultPath);
                     QDir::current().mkdir(sceneName);
@@ -192,7 +197,7 @@ void BenchmarkManager::runAll(const QString& configPath, const QString& filterPa
                         QString destRendererLog = QFileInfo(resultPath, baseFilename + "_renderer_output.log").filePath();
                         if(QFile::exists(destRendererLog))
                             QFile::remove(destRendererLog);
-                        QFile rendererLog(QFileInfo(QString::fromStdString(renderAtt.path)).baseName() + ".log");
+                        QFile rendererLog(QFileInfo(renderAtt.path).baseName() + ".log");
                         if(rendererLog.exists())
                             rendererLog.rename(destRendererLog);
 

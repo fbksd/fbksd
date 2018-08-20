@@ -91,7 +91,7 @@ private:
         *h = (time / 3600000);
     }
 
-    std::unique_ptr<BenchmarkConfig> config;
+    BenchmarkConfig config;
     int currentRenderIndex;
     int currentSceneIndex;
     int currentSppIndex;

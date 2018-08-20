@@ -1,194 +1,97 @@
-
 #include "CfgParser.h"
-#include <QtXml>
 
-using namespace std;
+#include <QFile>
+#include <QFileInfo>
+#include <QDir>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QJsonArray>
+#include <QJsonValue>
 
 
-//==========================================================================================================
-//                                          BenchmarkConfig
-//==========================================================================================================
-void BenchmarkConfig::addRenderingServer(const string &name, const string &path, int port)
+/**
+ * @brief A simple RAII class for changing the current directory.
+ */
+class CurrentPathGuard
 {
-    Renderer renderer;
-    renderer.name = name;
-    renderer.path = path;
-    renderer.port = port;
-    renderers.push_back(renderer);
-}
+public:
+    CurrentPathGuard(const QString& path):
+        m_prevPath(QDir::currentPath())
+    { QDir::setCurrent(path); }
 
-void BenchmarkConfig::addScene(int sceneID,
-                               const string &name,
-                               const string &path,
-                               std::vector<int> spps,
-                               std::vector<int> sppsIDs,
-                               SceneInfo description)
+    ~CurrentPathGuard()
+    { QDir::setCurrent(m_prevPath); }
+
+private:
+    QString m_prevPath;
+};
+
+
+BenchmarkConfig loadConfig(const QString &filePath)
 {
-    Scene scene;
-    scene.ID = sceneID;
-    scene.name = name;
-    scene.path = path;
-    scene.spps = spps;
-    scene.sppsIDs = sppsIDs;
-    scene.info = description;
-    renderers.back().scenes.push_back(scene);
-}
-
-
-
-//==========================================================================================================
-//                                          CfgParser
-//==========================================================================================================
-std::unique_ptr<BenchmarkConfig> CfgParser::load(const string &filename)
-{
-    QFileInfo fileInfo(QString::fromStdString(filename));
+    QFileInfo fileInfo(filePath);
     fileInfo.makeAbsolute();
-    QString oldCurrentPath = QDir::currentPath();
-    QDir::setCurrent(fileInfo.path());
+    CurrentPathGuard currentPathGuard(fileInfo.path());
 
     QFile file(fileInfo.filePath());
-
     if(!file.open(QIODevice::ReadOnly | QIODevice::Text))
     {
-        cout << "Error opening the configuration file." << endl;
-        return nullptr;
+        QString errorStr = "Couldn't open config file \"" +
+                            fileInfo.filePath() + "\".\n - " +
+                            file.errorString();
+        throw std::runtime_error(errorStr.toStdString());
     }
 
-    QDomDocument doc;
-
-    QString errorStr;
-    int errorLine;
-    int errorColumn;
-    if (!doc.setContent(&file, false, &errorStr, &errorLine, &errorColumn))
+    QByteArray saveData = file.readAll();
+    QJsonParseError error;
+    auto doc = QJsonDocument::fromJson(saveData, &error);
+    if(doc.isNull())
     {
-        std::cerr << "Error: Parse error at line " << errorLine << ", "
-                  << "column " << errorColumn << ": "
-                  << qPrintable(errorStr) << std::endl;
-        return nullptr;
+        QString errorStr = "Error parsing config file.\n - " + error.errorString();
+        throw std::runtime_error(errorStr.toStdString());
     }
 
-    QDomElement root = doc.documentElement();
-    if (root.tagName() != "benchmark")
+    BenchmarkConfig config;
+    auto root = doc.object();
+    if(root.contains("renderers"))
     {
-        std::cerr << "Error: File is not a benchmark configuration file." << std::endl;
-        return nullptr;
-    }
+        auto renderers = root["renderers"].toArray();
+        config.renderers.reserve(renderers.size());
 
-    std::unique_ptr<BenchmarkConfig> config(new BenchmarkConfig);
-
-    // Parse all child elements
-    QDomElement element = root.firstChildElement();
-    while(!element.isNull())
-    {
-        if(element.tagName() == "benchmark_settings")
-            parseBenchmarkSettings(element, config.get());
-        else if(element.tagName() == "rendering_server")
-            parseRenderingServer(element, config.get());
-
-        element = element.nextSiblingElement();
-    }
-
-    QDir::setCurrent(oldCurrentPath);
-    return config;
-}
-
-void CfgParser::parseBenchmarkSettings(const QDomElement &/*element*/, BenchmarkConfig */*manager*/)
-{
-//    QDomElement child = element.firstChildElement();
-
-//    while(!child.isNull())
-//    {
-//        if(child.attribute("name") == "sppCounts")
-//        {
-//            QString values = child.attribute("value");
-//            QStringList list = values.split(" ", QString::SkipEmptyParts);
-//            vector<int> spps;
-//            for(int i = 0; i < list.size(); ++i)
-//                spps.push_back(list[i].toInt());
-
-//            manager->setSppCounts(spps);
-//        }
-
-//        child = child.nextSiblingElement();
-//    }
-}
-
-void CfgParser::parseRenderingServer(const QDomElement &element, BenchmarkConfig *config)
-{
-    QString render_name = element.attribute("name");
-    QString render_path = element.attribute("path");
-    QString render_port = element.attribute("port");
-    config->addRenderingServer(render_name.toStdString(), render_path.toStdString(), render_port.toInt());
-
-    QDomElement child = element.firstChildElement();
-    if(!child.isNull() && child.tagName() == "scenes")
-        parseScenes(child, config);
-}
-
-void CfgParser::parseScenes(const QDomElement &element, BenchmarkConfig *config)
-{
-    QDomElement child = element.firstChildElement("scene");
-    while(!child.isNull())
-    {
-        int sceneID = child.attribute("id").toInt();
-        QString name = child.attribute("name");
-        QString path = child.attribute("path");
-        vector<int> sppsIDs;
-        vector<int> spps;
-        SceneInfo desc;
-
-        QDomElement desc_node = child.firstChildElement();
-        while(!desc_node.isNull())
+        for(const auto rendererRef: renderers)
         {
-            if(desc_node.tagName() == "scene_description")
-            {
-                desc = parseSceneInfo(desc_node);
-            }
-            else if(desc_node.tagName() == "spps")
-            {
-                QString att = desc_node.attribute("ids");
-                QStringList list = att.split(" ", QString::SkipEmptyParts);
-                for(int i = 0; i < list.size(); ++i)
-                    sppsIDs.push_back(list[i].toInt());
+            auto rendererObj = rendererRef.toObject();
+            BenchmarkConfig::Renderer renderer;
+            renderer.name = rendererObj["name"].toString();
+            renderer.path = rendererObj["path"].toString();
 
-                att = desc_node.attribute("values");
-                list = att.split(" ", QString::SkipEmptyParts);
-                for(int i = 0; i < list.size(); ++i)
-                    spps.push_back(list[i].toInt());
+            auto scenesArray = rendererObj["scenes"].toArray();
+            renderer.scenes.reserve(scenesArray.size());
+            for(const auto sceneRef: scenesArray)
+            {
+                auto sceneObj = sceneRef.toObject();
+                BenchmarkConfig::Scene scene;
+                scene.name = sceneObj["name"].toString();
+                scene.path = sceneObj["path"].toString();
+
+                auto sppsArray = sceneObj["spps"].toArray();
+                scene.spps.reserve(sppsArray.size());
+                for(const auto sppRef: sppsArray)
+                    scene.spps.push_back(sppRef.toInt());
+
+                auto sceneInfo = sceneObj["scene_info"].toObject();
+                scene.info.set("has_area_light", sceneInfo["has_area_light"].toBool());
+                scene.info.set("has_gi", sceneInfo["has_gi"].toBool());
+                scene.info.set("has_motion_blur", sceneInfo["has_motion_blur"].toBool());
+                scene.info.set("has_dof", sceneInfo["has_dof"].toBool());
+                scene.info.set("has_glossy_materials", sceneInfo["has_glossy_materials"].toBool());
+
+                renderer.scenes.push_back(scene);
             }
 
-            desc_node = desc_node.nextSiblingElement();
+            config.renderers.push_back(renderer);
         }
-
-        config->addScene(sceneID, name.toStdString(), path.toStdString(), spps, sppsIDs, desc);
-        child = child.nextSiblingElement("scene");
-    }
-}
-
-SceneInfo CfgParser::parseSceneInfo(const QDomElement &element)
-{
-    SceneInfo desc;
-
-    QDomElement child = element.firstChildElement();
-    while(!child.isNull())
-    {
-        if(child.attribute("name") == "hasDOF")
-            desc.set<bool>("has_dof", child.attribute("value") == "false" ? false : true);
-        else if(child.attribute("name") == "hasMotionBlur")
-            desc.set<bool>("has_motion_blur", child.attribute("value") == "false" ? false : true);
-        else if(child.attribute("name") == "hasAreaLight")
-            desc.set<bool>("has_area_lights", child.attribute("value") == "false" ? false : true);
-        else if(child.attribute("name") == "hasTextures")
-            desc.set<bool>("has_textures", child.attribute("value") == "false" ? false : true);
-        else if(child.attribute("name") == "hasDiffuseMaterials")
-            desc.set<bool>("has_diffuse_materials", child.attribute("value") == "false" ? false : true);
-        else if(child.attribute("name") == "hasSpecularMaterials")
-            desc.set<bool>("has_specular_materials", child.attribute("value") == "false" ? false : true);
-        else if(child.attribute("name") == "hasGlossyMaterials")
-            desc.set<bool>("has_glossy_materials", child.attribute("value") == "false" ? false : true);
-
-        child = child.nextSiblingElement();
     }
 
-    return desc;
+    return config;
 }
