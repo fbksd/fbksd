@@ -19,6 +19,7 @@ set(SRCS RPC.cpp
          SharedMemory.cpp)
 
 add_library(core ${SRCS} ${HEADERS})
+add_library(fbksd::core ALIAS core)
 target_link_libraries(core PUBLIC Qt5::Network -lrt)
 set_target_properties(core PROPERTIES OUTPUT_NAME "fbksd-core")
 target_include_directories(core PUBLIC

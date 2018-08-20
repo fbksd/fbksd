@@ -15,10 +15,6 @@
 #include <QJsonDocument>
 
 
-//#define MANUAL_RENDERER
-//#define MANUAL_ASR
-
-
 BenchmarkManager::BenchmarkManager():
     samplesMemory("SAMPLES_MEMORY"),
     pdfMemory("PDF_MEMORY"),

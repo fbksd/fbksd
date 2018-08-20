@@ -8,6 +8,7 @@ set(HEADERS ${HEADERS_PREFIX}/BenchmarkClient.h)
 set(SRCS BenchmarkClient.cpp)
 
 add_library(client ${SRCS} ${HEADERS})
+add_library(fbksd::client ALIAS client)
 target_link_libraries(client PUBLIC core)
 set_target_properties(client PROPERTIES OUTPUT_NAME "fbksd-client")
 install(TARGETS client

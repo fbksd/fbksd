@@ -14,6 +14,7 @@ set(SRCS RenderingServer.cpp
          samples.cpp )
 
 add_library(renderer ${SRCS} ${HEADERS})
+add_library(fbksd::renderer ALIAS renderer)
 target_link_libraries(renderer PUBLIC core)
 set_target_properties(renderer PROPERTIES OUTPUT_NAME "fbksd-renderer")
 install(TARGETS renderer
