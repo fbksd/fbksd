@@ -6,6 +6,8 @@
 
 #include <iostream>
 #include <memory>
+#include <chrono>
+#include <thread>
 #include <QDebug>
 #include <QProcess>
 #include <QFileInfo>
@@ -14,6 +16,29 @@
 #include <QDir>
 #include <QJsonObject>
 #include <QJsonDocument>
+#include <boost/asio.hpp>
+
+
+namespace {
+void waitPortOpen(unsigned short port)
+{
+    using namespace boost::asio;
+    using ip::tcp;
+
+    boost::system::error_code ec;
+    do
+    {
+        {
+            io_service svc;
+            tcp::acceptor a(svc);
+            a.open(tcp::v4(), ec) || a.bind({ tcp::v4(), port }, ec);
+        }
+        std::this_thread::sleep_for(std::chrono::seconds(1));
+    }
+    while(ec != error::address_in_use);
+}
+}
+
 
 
 BenchmarkManager::BenchmarkManager():
@@ -29,7 +54,7 @@ void BenchmarkManager::runScene(const QString& rendererPath, const QString& scen
 {
     // Start the benchmark server
     BenchmarkServer benchmarkServer(this);
-    benchmarkServer.startServer(2226);
+    benchmarkServer.run(/*2226*/);
 
     // Start rendering server with the given scene
     QProcess renderingServer;
@@ -39,6 +64,7 @@ void BenchmarkManager::runScene(const QString& rendererPath, const QString& scen
 
     // Start the render client
     // FIXME: setting client port manually here. Maybe all renderers should use the same port anyway?
+    waitPortOpen(2227);
     renderClient.reset(new RenderClient(this, 2227));
     currentSceneInfo = renderClient->getSceneInfo();
     if(spp)
@@ -96,7 +122,7 @@ void BenchmarkManager::runAll(const QString& configPath, const QString& filterPa
 
     // Start the benchmark server
     BenchmarkServer benchmarkServer(this);
-    benchmarkServer.startServer(2226);
+    benchmarkServer.run(/*2226*/);
 
     std::string filterName = QFileInfo(filterPath).baseName().toStdString();
 
@@ -152,6 +178,7 @@ void BenchmarkManager::runAll(const QString& configPath, const QString& filterPa
                     startProcess(renderAtt.path, scene.path, renderingServer);
 #endif
                     // Start the render client
+                    waitPortOpen(2227);
                     renderClient.reset(new RenderClient(this, 2227));
                     currentSceneInfo = renderClient->getSceneInfo();
                     allocateSharedMemory(getPixelCount(currentSceneInfo));
@@ -228,6 +255,7 @@ void BenchmarkManager::runAll(const QString& configPath, const QString& filterPa
             if(!startRenderer)
             {
                 renderClient->finishRender();
+                renderingServer.kill();
                 renderingServer.waitForFinished();
             }
         }
@@ -293,46 +321,6 @@ int BenchmarkManager::evaluateSamples(bool isSPP, int numSamples)
         numGenSamples = renderClient->evaluateSamples(true, numGenSamples / numPixels);
     else
         numGenSamples = renderClient->evaluateSamples(false, numGenSamples);
-    currentRenderingTime += renderTimer.elapsed();
-
-    timer.start();
-    return numGenSamples;
-}
-
-int BenchmarkManager::evaluateSamples(bool isSPP, int numSamples, const CropWindow &crop)
-{
-    currentExecTime += timer.elapsed();
-
-    int numPixels = getPixelCount(currentSceneInfo);
-    int numGenSamples = std::min(currentSampleBudget, isSPP ? numSamples * numPixels : numSamples);
-    currentSampleBudget = currentSampleBudget - numGenSamples;
-
-    renderTimer.start();
-    // if number of allowed samples to compute can be expressed as spp
-    if(isSPP && ((numGenSamples % numPixels) == 0))
-        numGenSamples = renderClient->evaluateSamples(true, numGenSamples / numPixels, crop);
-    else
-        numGenSamples = renderClient->evaluateSamples(false, numGenSamples, crop);
-    currentRenderingTime += renderTimer.elapsed();
-
-    timer.start();
-    return numGenSamples;
-}
-
-int BenchmarkManager::evaluateAdaptiveSamples(bool isSPP, int numSamples)
-{
-    currentExecTime += timer.elapsed();
-
-    int numPixels = getPixelCount(currentSceneInfo);
-    int numGenSamples = std::min(currentSampleBudget, isSPP ? numSamples * numPixels : numSamples);
-    currentSampleBudget = currentSampleBudget - numGenSamples;
-
-    renderTimer.start();
-    // if number of allowed samples to compute can be expressed as spp
-    if(isSPP && ((numGenSamples % numPixels) == 0))
-        numGenSamples = renderClient->evaluateAdaptiveSamples(true, numGenSamples / numPixels);
-    else
-        numGenSamples = renderClient->evaluateAdaptiveSamples(false, numGenSamples);
     currentRenderingTime += renderTimer.elapsed();
 
     timer.start();

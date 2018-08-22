@@ -4,7 +4,7 @@
 #include <vector>
 #include <string>
 #include <set>
-class QDataStream;
+#include <rpc/msgpack.hpp>
 
 
 /**
@@ -114,13 +114,12 @@ public:
      */
     bool hasInput(const std::string& name);
 
+    MSGPACK_DEFINE_ARRAY(parameters)
 private:
     friend class SampleAdapter;
     friend class SampleBuffer;
     friend class SamplesPipe;
     friend class BenchmarkManager;
-    friend QDataStream& operator<<(QDataStream& stream, const SampleLayout& layout);
-    friend QDataStream& operator>>(QDataStream& stream, SampleLayout& layout);
 
     bool isValid(const std::set<std::string>& reference) const;
 
@@ -135,8 +134,13 @@ private:
         std::string name;
         int number;
         ElementIO io;
+
+        MSGPACK_DEFINE_ARRAY(name, number, io)
     };
     std::vector<ParameterEntry> parameters;
 };
+
+MSGPACK_ADD_ENUM(SampleLayout::ElementIO);
+
 
 #endif

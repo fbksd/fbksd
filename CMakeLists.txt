@@ -7,6 +7,10 @@ option(FBKSD_MANUAL_CLIENT "Enable manual client process" OFF)
 # turn on c++14
 set(CMAKE_CXX_STANDARD 14)
 
+# rpclib lib
+add_subdirectory(ext/rpclib)
+add_library(rpclib::rpc ALIAS rpc)
+
 add_subdirectory(src/libcore)
 add_subdirectory(src/libclient)
 add_subdirectory(src/librenderer)

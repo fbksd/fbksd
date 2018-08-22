@@ -1,11 +1,13 @@
 
 # Qt
 set(CMAKE_AUTOMOC ON)
-find_package(Qt5Xml)
+find_package(Qt5Core)
 
 # OpenEXR
 include_directories(/usr/include/OpenEXR)
 set(OPENEXR_LIBRARIES IlmImf Half)
+
+find_package(Boost REQUIRED system)
 
 # header files
 set(HEADERS BenchmarkManager.h
@@ -21,7 +23,7 @@ set(SRCS BenchmarkManager.cpp
          main.cpp)
 
 add_executable(fbksd-benchmark ${SRCS} ${HEADERS})
-target_link_libraries(fbksd-benchmark PRIVATE core ${OPENEXR_LIBRARIES} Qt5::Xml)
+target_link_libraries(fbksd-benchmark PRIVATE core Qt5::Core ${OPENEXR_LIBRARIES} Boost::system)
 if(FBKSD_MANUAL_RENDERER)
     target_compile_definitions(fbksd-benchmark PRIVATE -DMANUAL_RENDERER)
 endif()

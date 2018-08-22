@@ -1,8 +1,4 @@
 
-# Qt
-set(CMAKE_AUTOMOC ON)
-find_package(Qt5Core)
-
 set(HEADERS_PREFIX ${PROJECT_SOURCE_DIR}/include/fbksd/renderer)
 
 # header files
@@ -15,7 +11,7 @@ set(SRCS RenderingServer.cpp
 
 add_library(renderer ${SRCS} ${HEADERS})
 add_library(fbksd::renderer ALIAS renderer)
-target_link_libraries(renderer PUBLIC core)
+target_link_libraries(renderer PUBLIC fbksd::core)
 set_target_properties(renderer PROPERTIES OUTPUT_NAME "fbksd-renderer")
 install(TARGETS renderer
     EXPORT fbksdTargets

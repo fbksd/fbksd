@@ -2,14 +2,12 @@
 #define RENDERCLIENT_H
 
 #include "fbksd/core/Definitions.h"
-#include "fbksd/core/RPC.h"
 
 #include <vector>
 #include <string>
 
 class BenchmarkManager;
-class QTcpServer;
-class QTcpSocket;
+namespace rpc { class client; }
 
 
 /**
@@ -17,10 +15,12 @@ class QTcpSocket;
  *
  * \ingroup BenchmarkServer
  */
-class RenderClient: public RPCClient
+class RenderClient
 {
 public:
     RenderClient(BenchmarkManager* manager, int port);
+
+    ~RenderClient();
 
     /**
      * \brief Requests scene information from the rendering system. This information is obtained from the
@@ -76,7 +76,7 @@ public:
 
 private:
     BenchmarkManager *manager;
-    QTcpSocket *current_connection;
+    std::unique_ptr<rpc::client> m_client;
 };
 
 

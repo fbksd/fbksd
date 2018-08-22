@@ -1,5 +1,4 @@
 #include "fbksd/core/SampleLayout.h"
-#include <QDataStream>
 
 
 SampleLayout &SampleLayout::operator()(const std::string &name, ElementIO io)
@@ -68,40 +67,6 @@ bool SampleLayout::hasInput(const std::string &name)
     }
 
     return false;
-}
-
-QDataStream& operator<<(QDataStream& stream, const SampleLayout& layout)
-{
-    stream << (quint64)layout.parameters.size();
-    for(std::size_t i = 0; i < layout.parameters.size(); ++i)
-    {
-        const SampleLayout::ParameterEntry& par = layout.parameters[i];
-        stream << QString::fromStdString(par.name);
-        stream << par.number;
-        stream << (bool)par.io;
-    }
-
-    return stream;
-}
-
-QDataStream& operator>>(QDataStream& stream, SampleLayout& layout)
-{
-    quint64 size = 0;
-    stream >> size;
-
-    layout.parameters.reserve(size);
-    for(int i = 0; i < size; ++i)
-    {
-        SampleLayout::ParameterEntry par;
-        QString name;
-        stream >> name;
-        par.name = name.toStdString();
-        stream >> par.number;
-        stream >> (bool&)par.io;
-        layout.parameters.push_back(par);
-    }
-
-    return stream;
 }
 
 bool SampleLayout::isValid(const std::set<std::string> &reference) const

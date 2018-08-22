@@ -3,10 +3,12 @@
 
 #include "fbksd/core/Definitions.h"
 #include "fbksd/core/SharedMemory.h"
-#include "fbksd/core/RPC.h"
 #include <vector>
 #include <string>
 #include <map>
+#include <memory>
+
+namespace rpc{ class client; };
 
 
 /**
@@ -29,7 +31,7 @@
  * A simple use case for a non-adaptive reconstruction technique is the following:
  * \snippet BenchmarkClient_snippet.cpp 4
  */
-class BenchmarkClient: public RPCClient
+class BenchmarkClient
 {
 public:
     /**
@@ -54,10 +56,7 @@ public:
      */
     BenchmarkClient();
 
-    /**
-     * \brief Finishes the connection with the benchmark server.
-     */
-    virtual ~BenchmarkClient();
+    ~BenchmarkClient();
 
     /**
      * \brief Get information about the scene being rendered.
@@ -126,33 +125,24 @@ public:
     int evaluateSamples(SamplesCountUnit unit, int numSamples);
 
     /**
-     * Evaluate samples in a given CropWindow.
-     */
-    int evaluateSamples(SamplesCountUnit unit, int numSamples, const CropWindow& crop);
-
-    /**
-     * \brief Compute adaptive samples generated according to a pdf
-     *
-     * \param[in] unit
-     * \param[in] numSamples
-     */
-    int evaluateAdaptiveSamples(SamplesCountUnit unit, int numSamples);
-
-    /**
      * \brief Sends the final result (rgb image)
      */
     void sendResult();
 
 private:
-    void fetchSceneInfo();
-    void test();
+    BenchmarkClient(const BenchmarkClient&) = delete;
+    BenchmarkClient& operator=(const BenchmarkClient&) = delete;
 
-    SharedMemory samplesMemory;
-    SharedMemory pdfMemory;
-    SharedMemory resultMemory;
-    SceneInfo sceneInfo;
-    int maxNumSamples;
+    void fetchSceneInfo();
+
+    std::unique_ptr<rpc::client> m_client;
+    SharedMemory m_samplesMemory;
+    SharedMemory m_pdfMemory;
+    SharedMemory m_resultMemory;
+    SceneInfo m_sceneInfo;
+    int m_maxNumSamples;
 };
+
 
 /**@}*/
 

@@ -1,108 +1,54 @@
-
 #include "BenchmarkServer.h"
-
 #include "BenchmarkManager.h"
-
-#include <QTcpServer>
-#include <QTcpSocket>
-#include <QHostAddress>
-#include <QTextStream>
-#include <QBuffer>
+#include <rpc/server.h>
 
 
-BenchmarkServer::BenchmarkServer(BenchmarkManager *manager)
+
+BenchmarkServer::BenchmarkServer(BenchmarkManager *manager):
+    m_server(std::make_unique<rpc::server>("127.0.0.1", 2226)),
+    manager(manager)
 {
-    this->manager = manager;
+    m_server->bind("EVALUATE_SAMPLES", [this](bool isSpp, int numSamples){ return evaluateSamples(isSpp, numSamples); });
+    m_server->bind("GET_SCENE_DESCRIPTION", [this](){ return getSceneInfo(); });
+    m_server->bind("SET_SAMPLE_LAYOUT", [this](const SampleLayout& layout){ return setSampleLayout(layout); });
+    m_server->bind("SEND_RESULT", [this](){ sendResult(); });
 
-    registerCall("EVALUATE_SAMPLES", [this](QDataStream& in, QDataStream& out){ evaluateSamples(in, out); });
-    registerCall("EVALUATE_SAMPLES_CROP", [this](QDataStream& in, QDataStream& out){ evaluateSamplesCrop(in, out); });
-    registerCall("EVALUATE_SAMPLES_PDF", [this](QDataStream& in, QDataStream& out){ evaluateSamplesPDF(in, out); });
-    registerCall("GET_SCENE_DESCRIPTION", [this](QDataStream& in, QDataStream& out){ getSceneInfo(in, out); });
-    registerCall("SET_SAMPLE_LAYOUT", [this](QDataStream& in, QDataStream& out){ setSampleLayout(in, out); });
-    registerCall("SEND_RESULT", [this](QDataStream& in, QDataStream& out){ sendResult(in, out); });
-
-    registerCall("GET_MODE", [this](QDataStream&, QDataStream& out)
-    {
-        bool mode = false;
-        out << (quint64)sizeof(bool);
-        out << mode;
-    });
+//    m_server->bind("GET_MODE", [this](QDataStream&, QDataStream& out)
+//    {
+//        bool mode = false;
+//        out << (quint64)sizeof(bool);
+//        out << mode;
+    //    });
 }
 
-void BenchmarkServer::getSceneInfo(QDataStream &, QDataStream& outStream)
-{
-    SceneInfo desc = manager->getSceneInfo();
+BenchmarkServer::~BenchmarkServer() = default;
 
-    SerialSize serialSize;
-    quint64 msgSize = serialSize(desc);
-    outStream << msgSize;
-    outStream << desc;
+void BenchmarkServer::run()
+{
+    m_server->async_run(1);
 }
 
-void BenchmarkServer::setSampleLayout(QDataStream& inDataStream, QDataStream& outStream)
+void BenchmarkServer::stop()
 {
-    SampleLayout layout;
-    inDataStream >> layout;
-    int returnCode = manager->setSampleLayout(layout);
-
-    quint64 msgSize = 0;
-    msgSize += sizeof(int);
-    outStream << msgSize;
-    outStream << returnCode;
+    m_server->stop();
 }
 
-void BenchmarkServer::evaluateSamples(QDataStream& inDataStream, QDataStream& outStream)
+SceneInfo BenchmarkServer::getSceneInfo()
 {
-    bool isSpp = false;
-    inDataStream >> isSpp;
-    int numSamples = 0;
-    inDataStream >> numSamples;
-
-    int numCompSamples = manager->evaluateSamples(isSpp, numSamples);
-
-    quint64 msgSize = 0;
-    msgSize += sizeof(int); // numCompSamples
-
-    outStream << msgSize;
-    outStream << numCompSamples;
+    return manager->getSceneInfo();
 }
 
-void BenchmarkServer::evaluateSamplesCrop(QDataStream& inDataStream, QDataStream& outStream)
+int BenchmarkServer::setSampleLayout(const SampleLayout& layout)
 {
-    bool isSpp = false;
-    inDataStream >> isSpp;
-    int numSamples = 0;
-    inDataStream >> numSamples;
-    CropWindow crop;
-    inDataStream >> crop;
-
-    int numCompSamples = manager->evaluateSamples(isSpp, numSamples, crop);
-
-    quint64 msgSize = 0;
-    msgSize += sizeof(int); // numCompSamples
-
-    outStream << msgSize;
-    outStream << numCompSamples;
+    return manager->setSampleLayout(layout);
 }
 
-void BenchmarkServer::evaluateSamplesPDF(QDataStream& inDataStream, QDataStream& outStream)
+int BenchmarkServer::evaluateSamples(bool isSpp, int numSamples)
 {
-    bool isSpp = false;
-    inDataStream >> isSpp;
-    int numSamples = 0;
-    inDataStream >> numSamples;
-
-    int numCompSamples = manager->evaluateAdaptiveSamples(isSpp, numSamples);
-
-    quint64 msgSize = 0;
-    msgSize += sizeof(int); // numCompSamples
-
-    outStream << msgSize;
-    outStream << numCompSamples;
+    return manager->evaluateSamples(isSpp, numSamples);
 }
 
-void BenchmarkServer::sendResult(QDataStream&, QDataStream& outStream)
+void BenchmarkServer::sendResult()
 {
     manager->sendResult();
-    outStream << quint64(0);
 }

@@ -3,11 +3,12 @@
 
 #include "samples.h"
 #include "fbksd/core/Definitions.h"
-#include "fbksd/core/RPC.h"
 #include "fbksd/core/SharedMemory.h"
 #include <map>
 #include <memory>
-#include <QObject>
+#include <functional>
+
+namespace rpc { class server; }
 
 
 /**
@@ -24,40 +25,46 @@
  * the appropriate signal is emitted.
  *
  */
-class RenderingServer : public RPCServer
+class RenderingServer
 {
-    Q_OBJECT
 public:
+    using GetSceneInfo = std::function<SceneInfo()>;
+    using SetParameters = std::function<
+        void( int maxSPP, const SampleLayout& layout, float* samplesBuffer, float* pdfBuffer)
+    >;
+    using EvaluateSamples = std::function<void(bool isSPP, int numSamples, int* resultSize)>;
+    using Finish = std::function<void()>;
+
     RenderingServer();
 
-signals:
-    /**
-     * \brief Requests information about the scene.
-     */
-    void getSceneInfo(SceneInfo* scene);
+    ~RenderingServer();
 
-    void setParameters(int maxSPP, const SampleLayout& layout, float* samplesBuffer, float* pdfBuffer);
+    void onGetSceneInfo(GetSceneInfo callback);
 
-    void evaluateSamples(bool isSPP, int numSamples, int* resultSize);
+    void onSetParameters(SetParameters callback);
 
-    void evaluateSamplesCrop(bool isSPP, int numSamples, const CropWindow& crop, int* resultSize);
+    void onEvaluateSamples(EvaluateSamples callback);
 
-    void evaluateSamplesPDF(bool isSPP, int numSamples, const float* pdf, int* resultSize);
+    void onFinish(Finish callback);
 
-    void finishRender();
+    void run();
 
 private:
-    void _getSceneInfo(QDataStream&, QDataStream&);
-    void _detachMemory(QDataStream&, QDataStream&);
-    void _setParameters(QDataStream&, QDataStream&);
-    void _evaluateSamples(QDataStream&, QDataStream&);
-    void _evaluateSamplesCrop(QDataStream&, QDataStream&);
-    void _evaluateSamplesPDF(QDataStream&, QDataStream&);
-    void _finishRender(QDataStream&, QDataStream&);
+    SceneInfo _getSceneInfo();
+    void _detachMemory();
+    void _setParameters(int maxSpp, const SampleLayout& layout);
+    int _evaluateSamples(bool isSPP, int numSamples);
+    void _finishRender();
 
+    std::unique_ptr<rpc::server> m_server;
     SharedMemory samplesMemory;
     SharedMemory pdfMemory;
     int pixelCount;
+
+    GetSceneInfo m_getSceneInfo;
+    SetParameters m_setParameters;
+    EvaluateSamples m_evalSamples;
+    Finish m_finish;
 };
 
 /**@}*/

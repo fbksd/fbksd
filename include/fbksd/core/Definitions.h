@@ -3,7 +3,6 @@
 
 #include "SampleLayout.h"
 #include "SceneInfo.h"
-#include <QDataStream>
 
 
 /**
@@ -27,19 +26,6 @@ struct CropWindow
 
     int beginX, beginY;
     int endX, endY;
-
-private:
-    friend QDataStream& operator<<(QDataStream& stream, const CropWindow& crop)
-    {
-        stream << crop.beginX << crop.beginY << crop.endX << crop.endY;
-        return stream;
-    }
-
-    friend QDataStream& operator>>(QDataStream& stream, CropWindow& crop)
-    {
-        stream >> crop.beginX >> crop.beginY >> crop.endX >> crop.endY;
-        return stream;
-    }
 };
 
 /**@}*/

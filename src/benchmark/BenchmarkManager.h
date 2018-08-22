@@ -15,9 +15,8 @@
 class BenchmarkServer;
 
 
-class BenchmarkManager : public QObject
+class BenchmarkManager
 {
-    Q_OBJECT
 public:
     BenchmarkManager();
 
@@ -42,8 +41,6 @@ public:
     SceneInfo getSceneInfo();
     int setSampleLayout(const SampleLayout& layout);
     int evaluateSamples(bool isSPP, int numSamples);
-    int evaluateSamples(bool isSPP, int numSamples, const CropWindow& crop);
-    int evaluateAdaptiveSamples(bool isSPP, int numSamples);
     void sendResult();
 
     int getPixelCount(const SceneInfo& info)

@@ -1,123 +1,89 @@
 #include "fbksd/renderer/RenderingServer.h"
 
-#include <QTcpServer>
-#include <QTcpSocket>
-#include <QHostAddress>
-#include <QTextStream>
-#include <QBuffer>
+#include <rpc/server.h>
+#include <rpc/this_server.h>
+#include <iostream>
 
 
 RenderingServer::RenderingServer() :
+    m_server(std::make_unique<rpc::server>("127.0.0.1", 2227)),
     samplesMemory("SAMPLES_MEMORY"),
     pdfMemory("PDF_MEMORY")
 {
-    registerCall("GET_SCENE_DESCRIPTION", [this](QDataStream& in, QDataStream& out){ _getSceneInfo(in, out); });
-    registerCall("SET_PARAMETERS", [this](QDataStream& in, QDataStream& out){ _setParameters(in, out); });
-    registerCall("DETACH_MEMORY", [this](QDataStream& in, QDataStream& out){ _detachMemory(in, out); });
-    registerCall("EVALUATE_SAMPLES", [this](QDataStream& in, QDataStream& out){ _evaluateSamples(in, out); });
-    registerCall("EVALUATE_SAMPLES_CROP", [this](QDataStream& in, QDataStream& out){ _evaluateSamplesCrop(in, out); });
-    registerCall("EVALUATE_SAMPLES_PDF", [this](QDataStream& in, QDataStream& out){ _evaluateSamplesPDF(in, out); });
-    registerCall("FINISH_RENDER", [this](QDataStream& in, QDataStream& out){ _finishRender(in, out); });
+    m_server->bind("GET_SCENE_DESCRIPTION", [this](){return _getSceneInfo();});
+    m_server->bind("SET_PARAMETERS", [this](int maxSpp, const SampleLayout& layout)
+    { _setParameters(maxSpp, layout); });
+    m_server->bind("DETACH_MEMORY", [this](){ _detachMemory(); });
+    m_server->bind("EVALUATE_SAMPLES", [this](bool isSpp, int numSamples){ return _evaluateSamples(isSpp, numSamples); });
+    m_server->bind("FINISH_RENDER", [this](){ _finishRender(); });
 }
 
-void RenderingServer::_getSceneInfo(QDataStream&, QDataStream& outStream)
+void RenderingServer::onGetSceneInfo(RenderingServer::GetSceneInfo callback)
 {
-    SceneInfo scene;
-    emit getSceneInfo(&scene);
-
-    pixelCount = scene.get<int>("width") * scene.get<int>("height");
-
-    SerialSize serialSize;
-    quint64 msgSize = serialSize(scene);
-    outStream << msgSize;
-    outStream << scene;
+    m_getSceneInfo = callback;
 }
 
-void RenderingServer::_detachMemory(QDataStream &, QDataStream& outStream)
+void RenderingServer::onSetParameters(RenderingServer::SetParameters callback)
+{
+    m_setParameters = callback;
+}
+
+void RenderingServer::onEvaluateSamples(RenderingServer::EvaluateSamples callback)
+{
+    m_evalSamples = callback;
+}
+
+void RenderingServer::onFinish(RenderingServer::Finish callback)
+{
+    m_finish = callback;
+}
+
+void RenderingServer::run()
+{
+    m_server->run();
+}
+
+RenderingServer::~RenderingServer() = default;
+
+SceneInfo RenderingServer::_getSceneInfo()
+{
+    SceneInfo scene = m_getSceneInfo();
+    pixelCount = scene.get<int>("width") * scene.get<int>("height");
+    return scene;
+}
+
+void RenderingServer::_detachMemory()
 {
     samplesMemory.detach();
-    outStream << quint64(0);
 }
 
-void RenderingServer::_setParameters(QDataStream& inDataStream, QDataStream& outStream)
+void RenderingServer::_setParameters(int maxSpp, const SampleLayout& layout)
 {
-    int maxSPP = 0;
-    inDataStream >> maxSPP;
-    SampleLayout layout;
-    inDataStream >> layout;
-
     if(!samplesMemory.attach())
-        qDebug() << samplesMemory.error().c_str();
+        std::cout << samplesMemory.error() << std::endl;
     if(!pdfMemory.attach())
-        qDebug() << pdfMemory.error().c_str();
+        std::cout << pdfMemory.error() << std::endl;
 
     SamplesPipe::setLayout(layout);
     SamplesPipe::samples = static_cast<float*>(samplesMemory.data());
 
-    emit setParameters(maxSPP, layout,
-                       static_cast<float*>(samplesMemory.data()),
-                       static_cast<float*>(pdfMemory.data()) );
-
-    outStream << quint64(0);
+    m_setParameters(maxSpp, layout,
+                    static_cast<float*>(samplesMemory.data()),
+                    static_cast<float*>(pdfMemory.data()) );
 }
 
-void RenderingServer::_evaluateSamples(QDataStream& inDataStream, QDataStream& outStream)
+int RenderingServer::_evaluateSamples(bool isSPP, int numSamples)
 {
-    bool isSPP = false;
-    inDataStream >> isSPP;
-    int numSamples = 0;
-    inDataStream >> numSamples;
-
     SamplesPipe::numSamples = isSPP ? numSamples * pixelCount : numSamples;
 
     int resultSize = 0;
-    emit evaluateSamples(isSPP, numSamples, &resultSize);
-
-    quint64 msgSize = 0;
-    msgSize += sizeof(int); // resultSize
-
-    outStream << msgSize;
-    outStream << resultSize;
+    m_evalSamples(isSPP, numSamples, &resultSize);
+    return resultSize;
 }
 
-void RenderingServer::_evaluateSamplesCrop(QDataStream& inDataStream, QDataStream& outStream)
+void RenderingServer::_finishRender()
 {
-    bool isSPP = false;
-    inDataStream >> isSPP;
-    int numSamples = 0;
-    inDataStream >> numSamples;
-    CropWindow crop;
-    inDataStream >> crop;
-
-    int resultSize = 0;
-    emit evaluateSamplesCrop(isSPP, numSamples, crop, &resultSize);
-
-    quint64 msgSize = 0;
-    msgSize += sizeof(int); // resultSize
-
-    outStream << msgSize;
-    outStream << resultSize;
-}
-
-void RenderingServer::_evaluateSamplesPDF(QDataStream& inDataStream, QDataStream& outStream)
-{
-    bool isSPP = false;
-    inDataStream >> isSPP;
-    int numSamples = 0;
-    inDataStream >> numSamples;
-
-    int resultSize = 0;
-    emit evaluateSamplesPDF(isSPP, numSamples, static_cast<float*>(pdfMemory.data()), &resultSize);
-
-    quint64 msgSize = 0;
-    msgSize += sizeof(int); // resultSize
-
-    outStream << msgSize;
-    outStream << resultSize;
-}
-
-void RenderingServer::_finishRender(QDataStream &, QDataStream &outStream)
-{
-    emit finishRender();
-    outStream << quint64(0);
+    if(m_finish)
+        m_finish();
+    rpc::this_server().stop();
 }

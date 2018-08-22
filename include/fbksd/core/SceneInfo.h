@@ -3,7 +3,7 @@
 
 #include <map>
 #include <string>
-class QDataStream;
+#include <rpc/msgpack.hpp>
 
 
 /**
@@ -53,10 +53,8 @@ public:
      */
     SceneInfo merged(const SceneInfo& scene) const;
 
+    MSGPACK_DEFINE_ARRAY(intMap, floatMap, boolMap, stringMap)
 private:
-    friend QDataStream& operator<<(QDataStream& stream, const SceneInfo& layout);
-    friend QDataStream& operator>>(QDataStream& stream, SceneInfo& layout);
-
     std::map<std::string, int> intMap;
     std::map<std::string, float> floatMap;
     std::map<std::string, bool> boolMap;
