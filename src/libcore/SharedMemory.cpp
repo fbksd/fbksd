@@ -8,24 +8,16 @@
 #include <iostream>
 
 
-SharedMemory::SharedMemory():
-    m_fd(-1),
-    m_size(0),
-    m_errno(0),
-    m_isCreator(false),
-    m_isAttached(false),
-    m_mem(MAP_FAILED)
-{}
+SharedMemory::SharedMemory() = default;
 
 SharedMemory::SharedMemory(const std::string& key):
-    m_key(key),
-    m_fd(-1),
-    m_size(0),
-    m_errno(0),
-    m_isCreator(false),
-    m_isAttached(false),
-    m_mem(MAP_FAILED)
+    m_key(key)
 {}
+
+SharedMemory::SharedMemory(SharedMemory&& shm) noexcept
+{
+    *this = std::move(shm);
+}
 
 SharedMemory::~SharedMemory()
 {
@@ -36,21 +28,43 @@ SharedMemory::~SharedMemory()
         shm_unlink(m_key.c_str());
 }
 
-void SharedMemory::setKey(const std::string &key)
+SharedMemory& SharedMemory::operator=(SharedMemory&& shm) noexcept
 {
-    m_key = key;
+    m_key = std::move(shm.m_key);
+    m_fd = shm.m_fd;
+    m_size = shm.m_size;
+    m_errno = shm.m_errno;
+    m_isCreator = shm.m_isCreator;
+    m_isAttached = shm.m_isAttached;
+    m_customError = std::move(shm.m_customError);
+    m_mem = shm.m_mem;
+
+    shm.m_isCreator = false;
+    shm.m_isAttached = false;
+    shm.m_mem = nullptr;
+
+    return *this;
 }
 
-std::string SharedMemory::key()
+void SharedMemory::setKey(const std::string &key)
+{
+    if(!m_isAttached)
+        m_key = key;
+}
+
+const std::string& SharedMemory::key() const
 {
     return m_key;
 }
 
 bool SharedMemory::create(size_t size)
 {
+    if(m_isAttached)
+        return false;
+
     // check the physical memory size
-    size_t nPages = sysconf(_SC_PHYS_PAGES);
-    size_t pageSize = sysconf(_SC_PAGE_SIZE);
+    size_t nPages = static_cast<size_t>(sysconf(_SC_PHYS_PAGES));
+    size_t pageSize = static_cast<size_t>(sysconf(_SC_PAGE_SIZE));
     size_t totalPhysMem = nPages * pageSize;
     if(size > totalPhysMem)
     {
@@ -90,7 +104,12 @@ bool SharedMemory::create(size_t size)
     }
 
     m_isCreator = true;
-    return attach();
+    if(!attach())
+    {
+        shm_unlink(m_key.c_str());
+        return false;
+    }
+    return true;
 }
 
 bool SharedMemory::attach()
@@ -111,10 +130,11 @@ bool SharedMemory::attach()
             m_size = memStat.st_size;
         }
 
-        m_mem = mmap(NULL, m_size, PROT_READ | PROT_WRITE, MAP_SHARED, m_fd, 0);
+        m_mem = mmap(nullptr, m_size, PROT_READ | PROT_WRITE, MAP_SHARED, m_fd, 0);
         if(m_mem == MAP_FAILED)
         {
             m_errno = errno;
+            m_mem = nullptr;
             return false;
         }
 
@@ -131,7 +151,7 @@ bool SharedMemory::detach()
     {
         if(munmap(m_mem, m_size) == 0)
         {
-            m_mem = MAP_FAILED;
+            m_mem = nullptr;
             m_isAttached = false;
             return true;
         }
@@ -142,17 +162,22 @@ bool SharedMemory::detach()
     return false;
 }
 
-bool SharedMemory::isAttached()
+bool SharedMemory::isAttached() const
 {
     return m_isAttached;
 }
 
-void *SharedMemory::data()
+const void *SharedMemory::data() const
 {
-    return m_mem != MAP_FAILED ? m_mem : nullptr;
+    return m_mem;
 }
 
-std::string SharedMemory::error()
+void *SharedMemory::data()
+{
+    return m_mem;
+}
+
+std::string SharedMemory::error() const
 {
     if(m_customError != "")
         return m_customError;
@@ -194,7 +219,7 @@ std::string SharedMemory::error()
     }
 }
 
-size_t SharedMemory::size()
+size_t SharedMemory::size() const
 {
     return m_size;
 }

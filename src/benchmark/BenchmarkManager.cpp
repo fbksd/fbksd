@@ -2,6 +2,7 @@
 
 #include "BenchmarkServer.h"
 #include "RenderClient.h"
+#include "exr_utils.h"
 #include "fbksd/renderer/samples.h"
 
 #include <iostream>
@@ -19,7 +20,13 @@
 #include <boost/asio.hpp>
 
 
-namespace {
+// ==========================================================
+// Auxiliary free functions.
+// ==========================================================
+namespace
+{
+// Waits for the given port to be in use.
+// This is used to wait for a server to open it's port.
 void waitPortOpen(unsigned short port)
 {
     using namespace boost::asio;
@@ -37,24 +44,57 @@ void waitPortOpen(unsigned short port)
     }
     while(ec != error::address_in_use);
 }
-}
 
-
-
-BenchmarkManager::BenchmarkManager():
-    samplesMemory("SAMPLES_MEMORY"),
-    pdfMemory("PDF_MEMORY"),
-    resultMemory("RESULT_MEMORY")
+// Converts milliseconds to h:m:s:ms format
+void convertMillisecons(int time, int* h, int* m, int* s, int* ms)
 {
-    currentExecTime = 0;
-    currentRenderingTime = 0;
+    *ms = time % 1000;
+    *s = (time / 1000) % 60;
+    *m = (time / 60000) % 60;
+    *h = (time / 3600000);
 }
+
+void getResolution(const SceneInfo& info, int *w, int *h)
+{
+    *w = info.get<int>("width");
+    *h = info.get<int>("height");
+}
+
+int getPixelCount(const SceneInfo& info)
+{
+    int w = 0;
+    int h = 0;
+    getResolution(info, &w, &h);
+    return w*h;
+}
+
+int getInitSampleBudget(const SceneInfo& info)
+{
+    return info.get<int>("max_spp") * getPixelCount(info);
+}
+}
+
+
+// ==========================================================
+// BenchmarkManager
+// ==========================================================
+BenchmarkManager::BenchmarkManager():
+    m_samplesMemory("SAMPLES_MEMORY"),
+    m_resultMemory("RESULT_MEMORY")
+{
+    m_benchmarkServer = std::make_unique<BenchmarkServer>();
+    m_benchmarkServer->onGetSceneInfo([this](){return onGetSceneInfo();} );
+    m_benchmarkServer->onSetParameters([this](const SampleLayout& layout){onSetSampleLayout(layout);});
+    m_benchmarkServer->onEvaluateSamples([this](bool isSpp, int numSamples){return onEvaluateSamples(isSpp, numSamples);});
+    m_benchmarkServer->onSendResult([this](){onSendResult();});
+}
+
+BenchmarkManager::~BenchmarkManager() = default;
 
 void BenchmarkManager::runScene(const QString& rendererPath, const QString& scenePath, const QString& filterPath, const QString& resultPath, int n, int spp)
 {
     // Start the benchmark server
-    BenchmarkServer benchmarkServer(this);
-    benchmarkServer.run(/*2226*/);
+    m_benchmarkServer->run(/*2226*/);
 
     // Start rendering server with the given scene
     QProcess renderingServer;
@@ -65,29 +105,29 @@ void BenchmarkManager::runScene(const QString& rendererPath, const QString& scen
     // Start the render client
     // FIXME: setting client port manually here. Maybe all renderers should use the same port anyway?
     waitPortOpen(2227);
-    renderClient.reset(new RenderClient(this, 2227));
-    currentSceneInfo = renderClient->getSceneInfo();
+    m_renderClient = std::make_unique<RenderClient>(this, 2227);
+    m_currentSceneInfo = m_renderClient->getSceneInfo();
     if(spp)
     {
-        currentSceneInfo.set<int>("max_spp", spp);
-        currentSceneInfo.set<int>("max_samples", spp * getPixelCount(currentSceneInfo));
+        m_currentSceneInfo.set<int>("max_spp", spp);
+        m_currentSceneInfo.set<int>("max_samples", spp * getPixelCount(m_currentSceneInfo));
     }
-    allocateSharedMemory(getPixelCount(currentSceneInfo));
+    allocateSharedMemory(getPixelCount(m_currentSceneInfo));
 
     int exitType = FILTER_SUCCESS;
     for(int i = 0; i < n; ++i)
     {
         qDebug("running %d of %d", i+1, n);
-        currentSampleBudget = getInitSampleBudget(currentSceneInfo);
+        m_currentSampleBudget = getInitSampleBudget(m_currentSceneInfo);
         // Start benchmark client
         QProcess filterApp;
 #ifndef MANUAL_ASR
         startProcess(filterPath, "", filterApp);
 #endif
 
-        currentExecTime = 0;
-        timer.start();
-        currentRenderingTime = 0;
+        m_currentExecTime = 0;
+        m_timer.start();
+        m_currentRenderingTime = 0;
 
         exitType = startEventLoop(&renderingServer, &filterApp);
         if(exitType == FILTER_SUCCESS)
@@ -106,14 +146,14 @@ void BenchmarkManager::runScene(const QString& rendererPath, const QString& scen
     // Finish rendering server and client
     if(exitType != RENDERER_CRASH)
     {
-        renderClient->finishRender();
+        m_renderClient->finishRender();
         renderingServer.waitForFinished();
     }
 }
 
 void BenchmarkManager::runAll(const QString& configPath, const QString& filterPath, const QString& resultPath, int n, bool resume)
 {
-    try{ config = loadConfig(configPath); }
+    try{ m_config = loadConfig(configPath); }
     catch(const std::runtime_error& error)
     {
         qCritical() << error.what();
@@ -121,30 +161,29 @@ void BenchmarkManager::runAll(const QString& configPath, const QString& filterPa
     }
 
     // Start the benchmark server
-    BenchmarkServer benchmarkServer(this);
-    benchmarkServer.run(/*2226*/);
+    m_benchmarkServer->run(/*2226*/);
 
     std::string filterName = QFileInfo(filterPath).baseName().toStdString();
 
     // Launch the ASR app for each renderer, scene and spp.
-    for(currentRenderIndex = 0; currentRenderIndex < config.renderers.size(); ++currentRenderIndex)
+    for(m_currentRenderIndex = 0; m_currentRenderIndex < m_config.renderers.size(); ++m_currentRenderIndex)
     {
-        const auto& renderAtt = config.renderers[currentRenderIndex];
+        const auto& renderAtt = m_config.renderers[m_currentRenderIndex];
 
-        for(currentSceneIndex = 0; currentSceneIndex < renderAtt.scenes.size(); ++currentSceneIndex)
+        for(m_currentSceneIndex = 0; m_currentSceneIndex < renderAtt.scenes.size(); ++m_currentSceneIndex)
         {
-            const auto& scene = renderAtt.scenes[currentSceneIndex];
+            const auto& scene = renderAtt.scenes[m_currentSceneIndex];
 
             QProcess renderingServer;
             bool startRenderer = true;
 
             bool skipRemainingSPPs = false;
-            for(currentSppIndex = 0; currentSppIndex < scene.spps.size(); ++currentSppIndex)
+            for(m_currentSppIndex = 0; m_currentSppIndex < scene.spps.size(); ++m_currentSppIndex)
             {
                 if(resume)
                 {
                     // If the log file exists and does not indicate a crash, skip to next iteration
-                    int spp = scene.spps[currentSppIndex];
+                    int spp = scene.spps[m_currentSppIndex];
                     //TODO: support the case with multiple iterations
                     QString baseFilename = scene.name +
                             "/" + QString::number(spp) + "_0_log.json";
@@ -162,7 +201,7 @@ void BenchmarkManager::runAll(const QString& configPath, const QString& filterPa
                             {
                                 std::cout << "Filter: " << filterName << ". ";
                                 std::cout << "Scene: " << scene.name.toStdString() << ". ";
-                                std::cout << "SPP: " << scene.spps[currentSppIndex] << ". ";
+                                std::cout << "SPP: " << scene.spps[m_currentSppIndex] << ". ";
                                 std::cout << "Iteration: 1/" << n << ". (skipping: already has results saved)" << std::endl;
                                 continue;
                             }
@@ -179,38 +218,38 @@ void BenchmarkManager::runAll(const QString& configPath, const QString& filterPa
 #endif
                     // Start the render client
                     waitPortOpen(2227);
-                    renderClient.reset(new RenderClient(this, 2227));
-                    currentSceneInfo = renderClient->getSceneInfo();
-                    allocateSharedMemory(getPixelCount(currentSceneInfo));
+                    m_renderClient = std::make_unique<RenderClient>(this, 2227);
+                    m_currentSceneInfo = m_renderClient->getSceneInfo();
+                    allocateSharedMemory(getPixelCount(m_currentSceneInfo));
                 }
 
                 // NOTE: The SceneInfo from the configuration file has priority over the one from the rendering system, e.g.
                 //  if they have two items with the same key, the item from the rendering system is overwritten by the one
                 //  from the configuration file.
-                currentSceneInfo = currentSceneInfo.merged(scene.info);
-                currentSceneInfo.set<int>("max_spp", scene.spps[currentSppIndex]);
-                int sampleBudget = getInitSampleBudget(currentSceneInfo);
-                currentSceneInfo.set<int>("max_samples", sampleBudget);
+                m_currentSceneInfo = m_currentSceneInfo.merged(scene.info);
+                m_currentSceneInfo.set<int>("max_spp", scene.spps[m_currentSppIndex]);
+                int sampleBudget = getInitSampleBudget(m_currentSceneInfo);
+                m_currentSceneInfo.set<int>("max_samples", sampleBudget);
 
                 for(int i = 0; i < n; ++i)
                 {
                     std::cout << "Filter: " << filterName << ". ";
                     std::cout << "Scene: " << scene.name.toStdString() << ". ";
-                    std::cout << "SPP: " << scene.spps[currentSppIndex] << ". ";
+                    std::cout << "SPP: " << scene.spps[m_currentSppIndex] << ". ";
                     std::cout << "Iteration: " << i+1 << "/" << n << "." << std::endl;
 
-                    currentSampleBudget = sampleBudget;
+                    m_currentSampleBudget = sampleBudget;
                     // Start benchmark client
                     QProcess filterApp;
 #ifndef MANUAL_ASR
                     startProcess(filterPath, "", filterApp);
 #endif
-                    currentExecTime = 0;
-                    timer.start();
-                    currentRenderingTime = 0;
+                    m_currentExecTime = 0;
+                    m_timer.start();
+                    m_currentRenderingTime = 0;
 
                     ProcessExitStatus exitType = startEventLoop(&renderingServer, &filterApp);
-                    int spp = scene.spps[currentSppIndex];
+                    int spp = scene.spps[m_currentSppIndex];
                     QString sceneName = scene.name;
                     QString prevCurrentDir = QDir::currentPath();
                     QDir::setCurrent(resultPath);
@@ -254,7 +293,7 @@ void BenchmarkManager::runAll(const QString& configPath, const QString& filterPa
             // Finish rendering server and client
             if(!startRenderer)
             {
-                renderClient->finishRender();
+                m_renderClient->finishRender();
                 renderingServer.kill();
                 renderingServer.waitForFinished();
             }
@@ -262,14 +301,14 @@ void BenchmarkManager::runAll(const QString& configPath, const QString& filterPa
     }
 }
 
-SceneInfo BenchmarkManager::getSceneInfo()
+SceneInfo BenchmarkManager::onGetSceneInfo()
 {
-    currentExecTime += timer.elapsed();
-    timer.start();
-    return currentSceneInfo;
+    m_currentExecTime += m_timer.elapsed();
+    m_timer.start();
+    return m_currentSceneInfo;
 }
 
-int BenchmarkManager::setSampleLayout(const SampleLayout& layout)
+int BenchmarkManager::onSetSampleLayout(const SampleLayout& layout)
 {
     enum ReturnCode
     {
@@ -278,7 +317,7 @@ int BenchmarkManager::setSampleLayout(const SampleLayout& layout)
         SHARED_MEMORY_ERROR,
     };
 
-    currentExecTime += timer.elapsed();
+    m_currentExecTime += m_timer.elapsed();
 
     if(!layout.isValid(getAllElements()))
     {
@@ -286,54 +325,54 @@ int BenchmarkManager::setSampleLayout(const SampleLayout& layout)
         return INVALID_LAYOUT; // invalid layout
     }
 
-    auto prevSize = samplesMemory.size();
+    auto prevSize = m_samplesMemory.size();
     size_t sampleSize = layout.getSampleSize();
-    auto newSize = currentSampleBudget * sampleSize * sizeof(float);
+    auto newSize = m_currentSampleBudget * sampleSize * sizeof(float);
     if(newSize > prevSize)
     {
-        samplesMemory.detach();
-        renderClient->detachMemory();
-        if(!samplesMemory.create(newSize))
+        m_samplesMemory.detach();
+        m_renderClient->detachMemory();
+        if(!m_samplesMemory.create(newSize))
         {
-            qDebug() << "Couldn't allocate samplesMemory: " << samplesMemory.error().c_str();
+            qDebug() << "Couldn't allocate samplesMemory: " << m_samplesMemory.error().c_str();
             return SHARED_MEMORY_ERROR;
         }
     }
 
-    int spp = currentSceneInfo.get<int>("max_spp");
-    renderClient->setParameters(spp, layout);
+    int spp = m_currentSceneInfo.get<int>("max_spp");
+    m_renderClient->setParameters(spp, layout);
 
-    timer.start();
+    m_timer.start();
     return OK;
 }
 
-int BenchmarkManager::evaluateSamples(bool isSPP, int numSamples)
+int BenchmarkManager::onEvaluateSamples(bool isSPP, int numSamples)
 {
-    currentExecTime += timer.elapsed();
+    m_currentExecTime += m_timer.elapsed();
 
-    int numPixels = getPixelCount(currentSceneInfo);
-    int numGenSamples = std::min(currentSampleBudget, isSPP ? numSamples * numPixels : numSamples);
-    currentSampleBudget = currentSampleBudget - numGenSamples;
+    int numPixels = getPixelCount(m_currentSceneInfo);
+    int numGenSamples = std::min(m_currentSampleBudget, isSPP ? numSamples * numPixels : numSamples);
+    m_currentSampleBudget = m_currentSampleBudget - numGenSamples;
 
-    renderTimer.start();
+    m_renderTimer.start();
     // if number of allowed samples to compute can be expressed as spp
     if(isSPP && ((numGenSamples % numPixels) == 0))
-        numGenSamples = renderClient->evaluateSamples(true, numGenSamples / numPixels);
+        numGenSamples = m_renderClient->evaluateSamples(true, numGenSamples / numPixels);
     else
-        numGenSamples = renderClient->evaluateSamples(false, numGenSamples);
-    currentRenderingTime += renderTimer.elapsed();
+        numGenSamples = m_renderClient->evaluateSamples(false, numGenSamples);
+    m_currentRenderingTime += m_renderTimer.elapsed();
 
-    timer.start();
+    m_timer.start();
     return numGenSamples;
 }
 
-void BenchmarkManager::sendResult()
+void BenchmarkManager::onSendResult()
 {
-    currentExecTime += timer.elapsed();
+    m_currentExecTime += m_timer.elapsed();
     int h, m, s, ms;
-    convertMillisecons(currentExecTime, &h, &m, &s, &ms);
+    convertMillisecons(m_currentExecTime, &h, &m, &s, &ms);
     qDebug("Filter execution time = %02d:%02d:%02d:%03d", h, m, s, ms);
-    convertMillisecons(currentRenderingTime, &h, &m, &s, &ms);
+    convertMillisecons(m_currentRenderingTime, &h, &m, &s, &ms);
     qDebug("Render execution time = %02d:%02d:%02d:%03d", h, m, s, ms);
 
 #ifdef MANUAL_ASR
@@ -343,29 +382,18 @@ void BenchmarkManager::sendResult()
 
 void BenchmarkManager::allocateSharedMemory(int pixelCount)
 {
-    if(pdfMemory.isAttached())
-        pdfMemory.detach();
-    if(resultMemory.isAttached())
-        resultMemory.detach();
+    if(m_resultMemory.isAttached())
+        m_resultMemory.detach();
 
-    int pdfMemorySize = pixelCount * sizeof(float);
-    if(!pdfMemory.create(pdfMemorySize))
-    {
-        qDebug() << "Couldn't create pdf memory: " << pdfMemory.error().c_str();
-        return;
-    }
     int resultMemorySize = pixelCount * 3 * sizeof(float);
-    if(!resultMemory.create(resultMemorySize))
+    if(!m_resultMemory.create(resultMemorySize))
     {
-        qDebug() << "Couldn't create result memory: " << resultMemory.error().c_str();
+        qDebug() << "Couldn't create result memory: " << m_resultMemory.error().c_str();
         return;
     }
 
-    float* pdfPtr = static_cast<float*>(pdfMemory.data());
-    memset(pdfPtr, 0, pdfMemorySize);
-    float* resultPtr = static_cast<float*>(resultMemory.data());
+    float* resultPtr = static_cast<float*>(m_resultMemory.data());
     memset(resultPtr, 0, resultMemorySize);
-
 }
 
 BenchmarkManager::ProcessExitStatus BenchmarkManager::startEventLoop(QProcess *renderer, QProcess *asr)
@@ -375,12 +403,12 @@ BenchmarkManager::ProcessExitStatus BenchmarkManager::startEventLoop(QProcess *r
     void (QProcess::*finishedSignal)(int, QProcess::ExitStatus) = &QProcess::finished;
 
 #ifndef MANUAL_RENDERER
-    rendererConnection = QObject::connect(renderer, finishedSignal, [&](int, QProcess::ExitStatus status)
+    m_rendererConnection = QObject::connect(renderer, finishedSignal, [&](int, QProcess::ExitStatus status)
     {
         if(status == QProcess::CrashExit && asr->state() == QProcess::Running)
         {
             qDebug() << "Rendering server crashed! Killing filter process trying next spp.";
-            QObject::disconnect(asrConnection);
+            QObject::disconnect(m_asrConnection);
             asr->kill();
             asr->waitForFinished();
             exitType = RENDERER_CRASH;
@@ -390,9 +418,9 @@ BenchmarkManager::ProcessExitStatus BenchmarkManager::startEventLoop(QProcess *r
 #endif
 
 #ifndef MANUAL_ASR
-    asrConnection = QObject::connect(asr, finishedSignal, [&](int exitCode, QProcess::ExitStatus status)
+    m_asrConnection = QObject::connect(asr, finishedSignal, [&](int exitCode, QProcess::ExitStatus status)
     {
-        QObject::disconnect(rendererConnection);
+        QObject::disconnect(m_rendererConnection);
         if(status == QProcess::NormalExit && exitCode != 0)
         {
             qDebug() << "Filter finished with code != 0. Trying next spp.";
@@ -426,67 +454,45 @@ void BenchmarkManager::startProcess(const QString& execPath, const QString& arg,
     }
 }
 
-#include <ImfOutputFile.h>
-#include <ImfChannelList.h>
-using namespace Imath;
 
 void BenchmarkManager::saveResult(const QString& filename, bool aborted)
 {
     // Write execution time log
+    QFile file(filename + "_log.json");
+    if(!file.open(QFile::WriteOnly))
+        qWarning("Couldn't open save json log file");
+    else
     {
-        QFile file(filename + "_log.json");
-        if(!file.open(QFile::WriteOnly))
-            qWarning("Couldn't open save json log file");
-        else
+        QJsonObject logObj;
+        logObj["date"] = QDateTime::currentDateTime().toString();
+        logObj["spp_budget"] = m_currentSceneInfo.get<int>("max_spp");
+        logObj["samples_budget"] = getInitSampleBudget(m_currentSceneInfo);
+        logObj["used_samples"] = getInitSampleBudget(m_currentSceneInfo) - m_currentSampleBudget;
+        logObj["aborted"] = aborted;
+        int h, m, s, ms;
         {
-            QJsonObject logObj;
-            logObj["date"] = QDateTime::currentDateTime().toString();
-            logObj["spp_budget"] = currentSceneInfo.get<int>("max_spp");
-            logObj["samples_budget"] = getInitSampleBudget(currentSceneInfo);
-            logObj["used_samples"] = getInitSampleBudget(currentSceneInfo) - currentSampleBudget;
-            logObj["aborted"] = aborted;
-            int h, m, s, ms;
-            {
-                QJsonObject recTimeObj;
-                int time = aborted ? 0 : currentExecTime;
-                recTimeObj["time_ms"] = time;
-                convertMillisecons(time, &h, &m, &s, &ms);
-                recTimeObj["time_str"] = QTime(h, m, s, ms).toString("hh:mm:ss.zzz");
-                logObj["reconstruction_time"] = recTimeObj;
-            }
-            {
-                QJsonObject renderingTimeObj;
-                renderingTimeObj["time_ms"] = currentRenderingTime;
-                convertMillisecons(currentRenderingTime, &h, &m, &s, &ms);
-                renderingTimeObj["time_str"] = QTime(h, m, s, ms).toString("hh:mm:ss.zzz");
-                logObj["rendering_time"] = renderingTimeObj;
-            }
-            QJsonDocument logDoc(logObj);
-            file.write(logDoc.toJson());
+            QJsonObject recTimeObj;
+            int time = aborted ? 0 : m_currentExecTime;
+            recTimeObj["time_ms"] = time;
+            convertMillisecons(time, &h, &m, &s, &ms);
+            recTimeObj["time_str"] = QTime(h, m, s, ms).toString("hh:mm:ss.zzz");
+            logObj["reconstruction_time"] = recTimeObj;
         }
+        {
+            QJsonObject renderingTimeObj;
+            renderingTimeObj["time_ms"] = m_currentRenderingTime;
+            convertMillisecons(m_currentRenderingTime, &h, &m, &s, &ms);
+            renderingTimeObj["time_str"] = QTime(h, m, s, ms).toString("hh:mm:ss.zzz");
+            logObj["rendering_time"] = renderingTimeObj;
+        }
+        QJsonDocument logDoc(logObj);
+        file.write(logDoc.toJson());
     }
 
     // Write resulting image
-    {
-        float* result = static_cast<float*>(resultMemory.data());
-
-        int xres, yres;
-        getResolution(currentSceneInfo, &xres, &yres);
-
-        Imf::Header header(xres, yres);
-        header.channels().insert ("R", Imf::Channel(Imf::FLOAT));
-        header.channels().insert ("G", Imf::Channel(Imf::FLOAT));
-        header.channels().insert ("B", Imf::Channel(Imf::FLOAT));
-
-        Imf::OutputFile file((filename + ".exr").toStdString().data(), header);
-        Imf::FrameBuffer frameBuffer;
-
-        frameBuffer.insert ("R", Imf::Slice( Imf::PixelType(Imf::FLOAT), (char*)result, sizeof(*result)*3, sizeof(*result)*xres*3));
-        frameBuffer.insert ("G", Imf::Slice( Imf::PixelType(Imf::FLOAT), (char*)(result + 1), sizeof(*result)*3, sizeof(*result)*xres*3));
-        frameBuffer.insert ("B", Imf::Slice( Imf::PixelType(Imf::FLOAT), (char*)(result + 2), sizeof(*result)*3, sizeof(*result)*xres*3));
-
-        file.setFrameBuffer(frameBuffer);
-        file.writePixels(yres);
-        memset(result, 0, xres*yres*3*sizeof(float));
-    }
+    auto result = static_cast<float*>(m_resultMemory.data());
+    int xres, yres;
+    getResolution(m_currentSceneInfo, &xres, &yres);
+    saveExr((filename + ".exr").toStdString(), result, xres, yres);
+    memset(result, 0, xres*yres*3*sizeof(float));
 }

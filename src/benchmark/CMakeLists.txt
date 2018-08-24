@@ -13,13 +13,15 @@ find_package(Boost REQUIRED system)
 set(HEADERS BenchmarkManager.h
             BenchmarkServer.h
             CfgParser.h
-            RenderClient.h)
+            RenderClient.h
+            exr_utils.h)
 
 # source files
 set(SRCS BenchmarkManager.cpp
          BenchmarkServer.cpp
          CfgParser.cpp
          RenderClient.cpp
+         exr_utils.cpp
          main.cpp)
 
 add_executable(fbksd-benchmark ${SRCS} ${HEADERS})

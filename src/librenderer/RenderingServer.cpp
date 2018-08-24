@@ -7,8 +7,8 @@
 
 RenderingServer::RenderingServer() :
     m_server(std::make_unique<rpc::server>("127.0.0.1", 2227)),
-    samplesMemory("SAMPLES_MEMORY"),
-    pdfMemory("PDF_MEMORY")
+    m_samplesMemory("SAMPLES_MEMORY"),
+    m_pdfMemory("PDF_MEMORY")
 {
     m_server->bind("GET_SCENE_DESCRIPTION", [this](){return _getSceneInfo();});
     m_server->bind("SET_PARAMETERS", [this](int maxSpp, const SampleLayout& layout)
@@ -48,33 +48,33 @@ RenderingServer::~RenderingServer() = default;
 SceneInfo RenderingServer::_getSceneInfo()
 {
     SceneInfo scene = m_getSceneInfo();
-    pixelCount = scene.get<int>("width") * scene.get<int>("height");
+    m_pixelCount = scene.get<int>("width") * scene.get<int>("height");
     return scene;
 }
 
 void RenderingServer::_detachMemory()
 {
-    samplesMemory.detach();
+    m_samplesMemory.detach();
 }
 
 void RenderingServer::_setParameters(int maxSpp, const SampleLayout& layout)
 {
-    if(!samplesMemory.attach())
-        std::cout << samplesMemory.error() << std::endl;
-    if(!pdfMemory.attach())
-        std::cout << pdfMemory.error() << std::endl;
+    if(!m_samplesMemory.attach())
+        std::cout << m_samplesMemory.error() << std::endl;
+    if(!m_pdfMemory.attach())
+        std::cout << m_pdfMemory.error() << std::endl;
 
     SamplesPipe::setLayout(layout);
-    SamplesPipe::samples = static_cast<float*>(samplesMemory.data());
+    SamplesPipe::samples = static_cast<float*>(m_samplesMemory.data());
 
     m_setParameters(maxSpp, layout,
-                    static_cast<float*>(samplesMemory.data()),
-                    static_cast<float*>(pdfMemory.data()) );
+                    static_cast<float*>(m_samplesMemory.data()),
+                    static_cast<float*>(m_pdfMemory.data()) );
 }
 
 int RenderingServer::_evaluateSamples(bool isSPP, int numSamples)
 {
-    SamplesPipe::numSamples = isSPP ? numSamples * pixelCount : numSamples;
+    SamplesPipe::numSamples = isSPP ? numSamples * m_pixelCount : numSamples;
 
     int resultSize = 0;
     m_evalSamples(isSPP, numSamples, &resultSize);

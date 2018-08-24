@@ -31,23 +31,11 @@ MSGPACK_ADD_ENUM(BenchmarkClient::SamplesCountUnit);
 BenchmarkClient::BenchmarkClient():
     m_client(std::make_unique<rpc::client>("127.0.0.1", 2226)),
     m_samplesMemory("SAMPLES_MEMORY"),
-    m_pdfMemory("PDF_MEMORY"),
     m_resultMemory("RESULT_MEMORY")
 {
     if(m_samplesMemory.isAttached())
-        exit(1);
+        throw std::logic_error("Shared memory already attached.");
 
-    m_maxNumSamples = 0;
-
-//    bool isTest = false;
-//    call("GET_MODE", 0, [](QDataStream&){}, [&](QDataStream& inDataStream)
-//    {
-//        inDataStream >> isTest;
-//    });
-
-//    if(isTest)
-//        test();
-//    else
     fetchSceneInfo();
 }
 
@@ -63,20 +51,12 @@ void BenchmarkClient::setSampleLayout(const SampleLayout& layout)
     m_client->call("SET_SAMPLE_LAYOUT", layout);
 
     if(!m_samplesMemory.attach())
-    {
-        std::cerr << m_samplesMemory.error() << std::endl;
-        exit(1);
-    }
+        throw std::runtime_error("Couldn't attach samples shared memory:\n - " + m_samplesMemory.error());
 }
 
 float *BenchmarkClient::getSamplesBuffer()
 {
     return static_cast<float*>(m_samplesMemory.data());
-}
-
-float *BenchmarkClient::getPdfBuffer()
-{
-    return static_cast<float*>(m_pdfMemory.data());
 }
 
 float *BenchmarkClient::getResultBuffer()
@@ -86,7 +66,7 @@ float *BenchmarkClient::getResultBuffer()
 
 int BenchmarkClient::evaluateSamples(SamplesCountUnit unit, int numSamples)
 {
-    return m_client->call("EVALUATE_SAMPLES", unit, numSamples).as<int>();
+    return m_client->call("EVALUATE_SAMPLES", unit == SAMPLES_PER_PIXEL, numSamples).as<int>();
 }
 
 void BenchmarkClient::sendResult()
@@ -99,8 +79,6 @@ void BenchmarkClient::fetchSceneInfo()
     m_sceneInfo = m_client->call("GET_SCENE_DESCRIPTION").as<SceneInfo>();
     m_maxNumSamples = m_sceneInfo.get<int>("max_samples");
 
-    if(!m_pdfMemory.attach())
-        std::cerr << m_pdfMemory.error() << std::endl;
     if(!m_resultMemory.attach())
-        std::cerr << m_resultMemory.error() << std::endl;
+        throw std::runtime_error("Couldn't attach result shared memory:\n - " + m_resultMemory.error());
 }

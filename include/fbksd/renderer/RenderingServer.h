@@ -28,12 +28,14 @@ namespace rpc { class server; }
 class RenderingServer
 {
 public:
-    using GetSceneInfo = std::function<SceneInfo()>;
-    using SetParameters = std::function<
-        void( int maxSPP, const SampleLayout& layout, float* samplesBuffer, float* pdfBuffer)
-    >;
-    using EvaluateSamples = std::function<void(bool isSPP, int numSamples, int* resultSize)>;
-    using Finish = std::function<void()>;
+    using GetSceneInfo
+        = std::function<SceneInfo()>;
+    using SetParameters
+        = std::function<void(int maxSPP, const SampleLayout& layout, float* samplesBuffer, float* pdfBuffer)>;
+    using EvaluateSamples
+        = std::function<void(bool isSPP, int numSamples, int* resultSize)>;
+    using Finish
+        = std::function<void()>;
 
     RenderingServer();
 
@@ -57,9 +59,9 @@ private:
     void _finishRender();
 
     std::unique_ptr<rpc::server> m_server;
-    SharedMemory samplesMemory;
-    SharedMemory pdfMemory;
-    int pixelCount;
+    SharedMemory m_samplesMemory;
+    SharedMemory m_pdfMemory;
+    int m_pixelCount;
 
     GetSceneInfo m_getSceneInfo;
     SetParameters m_setParameters;

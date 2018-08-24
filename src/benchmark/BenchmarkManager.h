@@ -20,6 +20,8 @@ class BenchmarkManager
 public:
     BenchmarkManager();
 
+    ~BenchmarkManager();
+
     /**
      * \brief Runs the benchmark using the given renderer and scene.
      *
@@ -30,36 +32,21 @@ public:
      * \param n             Number of times to run the benchmark
      * \param spp           Number of samples per pixel
      */
-    void runScene(const QString& rendererPath, const QString& scenePath, const QString& filterPath, const QString& resultPath, int n, int spp);
+    void runScene(const QString& rendererPath,
+                  const QString& scenePath,
+                  const QString& filterPath,
+                  const QString& resultPath,
+                  int n,
+                  int spp);
 
     /**
      * \brief Runs the benchmark for all renderers/scenes in the configuration file.
      */
-    void runAll(const QString& configPath, const QString& filterPath, const QString& resultPath, int n, bool resume = false);
-
-    // Methods used by the BenchmarkServer
-    SceneInfo getSceneInfo();
-    int setSampleLayout(const SampleLayout& layout);
-    int evaluateSamples(bool isSPP, int numSamples);
-    void sendResult();
-
-    int getPixelCount(const SceneInfo& info)
-    {
-        int w = info.get<int>("width");
-        int h = info.get<int>("height");
-        return w*h;
-    }
-
-    void getResolution(const SceneInfo& info, int *w, int *h)
-    {
-        *w = info.get<int>("width");
-        *h = info.get<int>("height");
-    }
-
-    int getInitSampleBudget(const SceneInfo& info)
-    {
-        return info.get<int>("max_spp") * getPixelCount(info);
-    }
+    void runAll(const QString& configPath,
+                const QString& filterPath,
+                const QString& resultPath,
+                int n,
+                bool resume = false);
 
 
 private:
@@ -72,40 +59,34 @@ private:
     };
 
     void allocateSharedMemory(int);
-
     ProcessExitStatus startEventLoop(QProcess* renderer, QProcess* asr);
-
     void startProcess(const QString& execPath, const QString& arg, QProcess& process);
-
     void saveResult(const QString& filename, bool aborted);
 
-    // Converts milliseconds to h:m:s:ms format
-    void convertMillisecons(int time, int* h, int* m, int* s, int* ms)
-    {
-        *ms = time % 1000;
-        *s = (time / 1000) % 60;
-        *m = (time / 60000) % 60;
-        *h = (time / 3600000);
-    }
+    // Methods used by the BenchmarkServer
+    SceneInfo onGetSceneInfo();
+    int onSetSampleLayout(const SampleLayout& layout);
+    int onEvaluateSamples(bool isSPP, int numSamples);
+    void onSendResult();
 
-    BenchmarkConfig config;
-    int currentRenderIndex;
-    int currentSceneIndex;
-    int currentSppIndex;
-    int currentSampleBudget;
-    SceneInfo currentSceneInfo;
-    SharedMemory samplesMemory;
-    SharedMemory pdfMemory;
-    SharedMemory resultMemory;
+    std::unique_ptr<BenchmarkServer> m_benchmarkServer;
+    BenchmarkConfig m_config;
+    int m_currentRenderIndex = 0;
+    int m_currentSceneIndex = 0;
+    int m_currentSppIndex = 0;
+    int m_currentSampleBudget = 0;
+    SceneInfo m_currentSceneInfo;
+    SharedMemory m_samplesMemory;
+    SharedMemory m_resultMemory;
 
-    QMetaObject::Connection rendererConnection;
-    QMetaObject::Connection asrConnection;
+    QMetaObject::Connection m_rendererConnection;
+    QMetaObject::Connection m_asrConnection;
 
-    std::unique_ptr<RenderClient> renderClient;
-    QTime timer;
-    int currentExecTime;
-    QTime renderTimer;
-    int currentRenderingTime;
+    std::unique_ptr<RenderClient> m_renderClient;
+    QTime m_timer;
+    int m_currentExecTime = 0;
+    QTime m_renderTimer;
+    int m_currentRenderingTime = 0;
 };
 
 #endif // BENCHMARKMANAGER_H

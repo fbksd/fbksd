@@ -1,11 +1,17 @@
-cmake_minimum_required(VERSION 2.8.3 FATAL_ERROR)
-project(fbksd-core)
+cmake_minimum_required(VERSION 3.5.1 FATAL_ERROR)
+project(fbksd-core VERSION 0.0.1)
 
 option(FBKSD_MANUAL_RENDERER "Enable manual renderer process." OFF)
 option(FBKSD_MANUAL_CLIENT "Enable manual client process" OFF)
+option(FBKSD_TESTS "Compile tests." ON)
 
 # turn on c++14
 set(CMAKE_CXX_STANDARD 14)
+
+if(FBKSD_TESTS)
+    enable_testing()
+    add_subdirectory(tests)
+endif()
 
 # rpclib lib
 add_subdirectory(ext/rpclib)

@@ -56,6 +56,8 @@ public:
      */
     BenchmarkClient();
 
+    BenchmarkClient(const BenchmarkClient&) = delete;
+
     ~BenchmarkClient();
 
     /**
@@ -89,15 +91,6 @@ public:
     float* getSamplesBuffer();
 
     /**
-     * \brief Returns a pointer to the buffer where the PDF for adaptive sampling is stored.
-     *
-     * The user should write the desired PDF to this buffer before calling evaluateAdaptiveSamples().
-     *
-     * BenchmarkClient owns the buffer: the user should not delete it manually.
-     */
-    float* getPdfBuffer();
-
-    /**
      * \brief Returns a pointer to the buffer where the result image is stored.
      *
      * The user should write the final reconstructed image to this buffer before calling
@@ -129,18 +122,16 @@ public:
      */
     void sendResult();
 
-private:
-    BenchmarkClient(const BenchmarkClient&) = delete;
     BenchmarkClient& operator=(const BenchmarkClient&) = delete;
 
+private:
     void fetchSceneInfo();
 
     std::unique_ptr<rpc::client> m_client;
     SharedMemory m_samplesMemory;
-    SharedMemory m_pdfMemory;
     SharedMemory m_resultMemory;
     SceneInfo m_sceneInfo;
-    int m_maxNumSamples;
+    int m_maxNumSamples = 0;
 };
 
 

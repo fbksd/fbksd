@@ -53,7 +53,7 @@ int SampleLayout::getOutputSize() const
     return getSampleSize() - getInputSize();
 }
 
-bool SampleLayout::hasInput(const std::string &name)
+bool SampleLayout::hasInput(const std::string &name) const
 {
     for(const auto& e: parameters)
     {

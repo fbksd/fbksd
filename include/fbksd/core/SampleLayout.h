@@ -112,7 +112,7 @@ public:
     /**
      * \brief Checks if the element `name` exists and is INPUT.
      */
-    bool hasInput(const std::string& name);
+    bool hasInput(const std::string& name) const;
 
     MSGPACK_DEFINE_ARRAY(parameters)
 private:

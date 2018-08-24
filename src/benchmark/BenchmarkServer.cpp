@@ -4,51 +4,55 @@
 
 
 
-BenchmarkServer::BenchmarkServer(BenchmarkManager *manager):
-    m_server(std::make_unique<rpc::server>("127.0.0.1", 2226)),
-    manager(manager)
+BenchmarkServer::BenchmarkServer():
+    m_server(std::make_unique<rpc::server>("127.0.0.1", 2226))
 {
-    m_server->bind("EVALUATE_SAMPLES", [this](bool isSpp, int numSamples){ return evaluateSamples(isSpp, numSamples); });
-    m_server->bind("GET_SCENE_DESCRIPTION", [this](){ return getSceneInfo(); });
-    m_server->bind("SET_SAMPLE_LAYOUT", [this](const SampleLayout& layout){ return setSampleLayout(layout); });
-    m_server->bind("SEND_RESULT", [this](){ sendResult(); });
-
-//    m_server->bind("GET_MODE", [this](QDataStream&, QDataStream& out)
-//    {
-//        bool mode = false;
-//        out << (quint64)sizeof(bool);
-//        out << mode;
-    //    });
 }
 
 BenchmarkServer::~BenchmarkServer() = default;
 
+void BenchmarkServer::onGetSceneInfo(const GetSceneInfo& callback)
+{
+    m_getSceneInfoSet = true;
+    m_server->bind("GET_SCENE_DESCRIPTION", callback);
+}
+
+void BenchmarkServer::onSetParameters(const SetParameters& callback)
+{
+    m_setParametersSet = true;
+    m_server->bind("SET_SAMPLE_LAYOUT", callback);
+}
+
+void BenchmarkServer::onEvaluateSamples(const EvaluateSamples& callback)
+{
+    m_evalSamplesSet = true;
+    m_server->bind("EVALUATE_SAMPLES", callback);
+}
+
+void BenchmarkServer::onSendResult(const SendResult& callback)
+{
+    m_sendResultSet = true;
+    m_server->bind("SEND_RESULT", callback);
+}
+
 void BenchmarkServer::run()
 {
+    std::string missingFunc;
+    if(!m_getSceneInfoSet)
+        missingFunc += "GetSceneInfo ";
+    if(!m_setParametersSet)
+        missingFunc += "SetParameters ";
+    if(!m_evalSamplesSet)
+        missingFunc += "EvaluateSamples ";
+    if(!m_sendResultSet)
+        missingFunc += "SendResult";
+    if(!missingFunc.empty())
+        throw std::logic_error("Missing callback function(s):\n" + missingFunc);
+
     m_server->async_run(1);
 }
 
 void BenchmarkServer::stop()
 {
     m_server->stop();
-}
-
-SceneInfo BenchmarkServer::getSceneInfo()
-{
-    return manager->getSceneInfo();
-}
-
-int BenchmarkServer::setSampleLayout(const SampleLayout& layout)
-{
-    return manager->setSampleLayout(layout);
-}
-
-int BenchmarkServer::evaluateSamples(bool isSpp, int numSamples)
-{
-    return manager->evaluateSamples(isSpp, numSamples);
-}
-
-void BenchmarkServer::sendResult()
-{
-    manager->sendResult();
 }

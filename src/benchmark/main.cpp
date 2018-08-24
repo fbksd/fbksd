@@ -1,8 +1,5 @@
 
-#include "CfgParser.h"
 #include "BenchmarkManager.h"
-#include "BenchmarkServer.h"
-#include "RenderClient.h"
 
 #include <QCoreApplication>
 #include <QCommandLineParser>
