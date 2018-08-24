@@ -12,22 +12,28 @@
         if(item != map.end()){ \
             return item->second; \
         } \
-        std::cout << "SceneInfo: no scene attribute called " << name << std::endl; \
         return type(); \
     }
 
+
 SceneInfo_NEW_TYPE(float, floatMap)
-SceneInfo_NEW_TYPE(int, intMap)
+SceneInfo_NEW_TYPE(int64_t, int64Map)
 SceneInfo_NEW_TYPE(bool, boolMap)
 SceneInfo_NEW_TYPE(std::string, stringMap)
 
+
+template<>
+void SceneInfo::set(const std::string &name, const int& value)
+{
+    int64Map[name] = value;
+}
 
 SceneInfo SceneInfo::merged(const SceneInfo& scene) const
 {
     SceneInfo result = *this;
 
-    for(auto& item : scene.intMap)
-        result.intMap[item.first] = item.second;
+    for(auto& item : scene.int64Map)
+        result.int64Map[item.first] = item.second;
     for(auto& item : scene.floatMap)
         result.floatMap[item.first] = item.second;
     for(auto& item : scene.boolMap)

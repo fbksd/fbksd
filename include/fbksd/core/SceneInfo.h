@@ -3,6 +3,7 @@
 
 #include <map>
 #include <string>
+#include <cstdint>
 #include <rpc/msgpack.hpp>
 
 
@@ -53,9 +54,9 @@ public:
      */
     SceneInfo merged(const SceneInfo& scene) const;
 
-    MSGPACK_DEFINE_ARRAY(intMap, floatMap, boolMap, stringMap)
+    MSGPACK_DEFINE_ARRAY(int64Map, floatMap, boolMap, stringMap)
 private:
-    std::map<std::string, int> intMap;
+    std::map<std::string, int64_t> int64Map;
     std::map<std::string, float> floatMap;
     std::map<std::string, bool> boolMap;
     std::map<std::string, std::string> stringMap;

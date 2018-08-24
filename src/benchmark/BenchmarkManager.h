@@ -58,7 +58,7 @@ private:
         RENDERER_CRASH
     };
 
-    void allocateSharedMemory(int);
+    void allocateSharedMemory(int64_t);
     ProcessExitStatus startEventLoop(QProcess* renderer, QProcess* asr);
     void startProcess(const QString& execPath, const QString& arg, QProcess& process);
     void saveResult(const QString& filename, bool aborted);
@@ -66,7 +66,7 @@ private:
     // Methods used by the BenchmarkServer
     SceneInfo onGetSceneInfo();
     int onSetSampleLayout(const SampleLayout& layout);
-    int onEvaluateSamples(bool isSPP, int numSamples);
+    int64_t onEvaluateSamples(bool isSPP, int64_t numSamples);
     void onSendResult();
 
     std::unique_ptr<BenchmarkServer> m_benchmarkServer;
@@ -74,7 +74,7 @@ private:
     int m_currentRenderIndex = 0;
     int m_currentSceneIndex = 0;
     int m_currentSppIndex = 0;
-    int m_currentSampleBudget = 0;
+    int64_t m_currentSampleBudget = 0;
     SceneInfo m_currentSceneInfo;
     SharedMemory m_samplesMemory;
     SharedMemory m_resultMemory;

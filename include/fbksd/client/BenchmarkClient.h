@@ -115,7 +115,7 @@ public:
      * \param[in] unit          The unit used to count samples
      * \param[in] numSamples    The number of samples (according to unit)
      */
-    int evaluateSamples(SamplesCountUnit unit, int numSamples);
+    int64_t evaluateSamples(SamplesCountUnit unit, int64_t numSamples);
 
     /**
      * \brief Sends the final result (rgb image)
@@ -131,7 +131,7 @@ private:
     SharedMemory m_samplesMemory;
     SharedMemory m_resultMemory;
     SceneInfo m_sceneInfo;
-    int m_maxNumSamples = 0;
+    int64_t m_maxNumSamples = 0;
 };
 
 

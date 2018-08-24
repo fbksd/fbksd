@@ -54,23 +54,23 @@ void convertMillisecons(int time, int* h, int* m, int* s, int* ms)
     *h = (time / 3600000);
 }
 
-void getResolution(const SceneInfo& info, int *w, int *h)
+void getResolution(const SceneInfo& info, int64_t *w, int64_t *h)
 {
-    *w = info.get<int>("width");
-    *h = info.get<int>("height");
+    *w = info.get<int64_t>("width");
+    *h = info.get<int64_t>("height");
 }
 
-int getPixelCount(const SceneInfo& info)
+int64_t getPixelCount(const SceneInfo& info)
 {
-    int w = 0;
-    int h = 0;
+    int64_t w = 0;
+    int64_t h = 0;
     getResolution(info, &w, &h);
     return w*h;
 }
 
-int getInitSampleBudget(const SceneInfo& info)
+int64_t getInitSampleBudget(const SceneInfo& info)
 {
-    return info.get<int>("max_spp") * getPixelCount(info);
+    return info.get<int64_t>("max_spp") * getPixelCount(info);
 }
 }
 
@@ -91,7 +91,12 @@ BenchmarkManager::BenchmarkManager():
 
 BenchmarkManager::~BenchmarkManager() = default;
 
-void BenchmarkManager::runScene(const QString& rendererPath, const QString& scenePath, const QString& filterPath, const QString& resultPath, int n, int spp)
+void BenchmarkManager::runScene(const QString& rendererPath,
+                                const QString& scenePath,
+                                const QString& filterPath,
+                                const QString& resultPath,
+                                int n,
+                                int spp)
 {
     // Start the benchmark server
     m_benchmarkServer->run(/*2226*/);
@@ -109,8 +114,8 @@ void BenchmarkManager::runScene(const QString& rendererPath, const QString& scen
     m_currentSceneInfo = m_renderClient->getSceneInfo();
     if(spp)
     {
-        m_currentSceneInfo.set<int>("max_spp", spp);
-        m_currentSceneInfo.set<int>("max_samples", spp * getPixelCount(m_currentSceneInfo));
+        m_currentSceneInfo.set("max_spp", spp);
+        m_currentSceneInfo.set("max_samples", spp * getPixelCount(m_currentSceneInfo));
     }
     allocateSharedMemory(getPixelCount(m_currentSceneInfo));
 
@@ -151,7 +156,11 @@ void BenchmarkManager::runScene(const QString& rendererPath, const QString& scen
     }
 }
 
-void BenchmarkManager::runAll(const QString& configPath, const QString& filterPath, const QString& resultPath, int n, bool resume)
+void BenchmarkManager::runAll(const QString& configPath,
+                              const QString& filterPath,
+                              const QString& resultPath,
+                              int n,
+                              bool resume)
 {
     try{ m_config = loadConfig(configPath); }
     catch(const std::runtime_error& error)
@@ -227,9 +236,9 @@ void BenchmarkManager::runAll(const QString& configPath, const QString& filterPa
                 //  if they have two items with the same key, the item from the rendering system is overwritten by the one
                 //  from the configuration file.
                 m_currentSceneInfo = m_currentSceneInfo.merged(scene.info);
-                m_currentSceneInfo.set<int>("max_spp", scene.spps[m_currentSppIndex]);
-                int sampleBudget = getInitSampleBudget(m_currentSceneInfo);
-                m_currentSceneInfo.set<int>("max_samples", sampleBudget);
+                m_currentSceneInfo.set("max_spp", scene.spps[m_currentSppIndex]);
+                auto sampleBudget = getInitSampleBudget(m_currentSceneInfo);
+                m_currentSceneInfo.set("max_samples", sampleBudget);
 
                 for(int i = 0; i < n; ++i)
                 {
@@ -326,7 +335,7 @@ int BenchmarkManager::onSetSampleLayout(const SampleLayout& layout)
     }
 
     auto prevSize = m_samplesMemory.size();
-    size_t sampleSize = layout.getSampleSize();
+    int64_t sampleSize = layout.getSampleSize();
     auto newSize = m_currentSampleBudget * sampleSize * sizeof(float);
     if(newSize > prevSize)
     {
@@ -339,19 +348,19 @@ int BenchmarkManager::onSetSampleLayout(const SampleLayout& layout)
         }
     }
 
-    int spp = m_currentSceneInfo.get<int>("max_spp");
+    auto spp = m_currentSceneInfo.get<int64_t>("max_spp");
     m_renderClient->setParameters(spp, layout);
 
     m_timer.start();
     return OK;
 }
 
-int BenchmarkManager::onEvaluateSamples(bool isSPP, int numSamples)
+int64_t BenchmarkManager::onEvaluateSamples(bool isSPP, int64_t numSamples)
 {
     m_currentExecTime += m_timer.elapsed();
 
-    int numPixels = getPixelCount(m_currentSceneInfo);
-    int numGenSamples = std::min(m_currentSampleBudget, isSPP ? numSamples * numPixels : numSamples);
+    auto numPixels = getPixelCount(m_currentSceneInfo);
+    auto numGenSamples = std::min(m_currentSampleBudget, isSPP ? numSamples * numPixels : numSamples);
     m_currentSampleBudget = m_currentSampleBudget - numGenSamples;
 
     m_renderTimer.start();
@@ -380,19 +389,19 @@ void BenchmarkManager::onSendResult()
 #endif
 }
 
-void BenchmarkManager::allocateSharedMemory(int pixelCount)
+void BenchmarkManager::allocateSharedMemory(int64_t pixelCount)
 {
     if(m_resultMemory.isAttached())
         m_resultMemory.detach();
 
-    int resultMemorySize = pixelCount * 3 * sizeof(float);
+    int64_t resultMemorySize = pixelCount * 3 * static_cast<int64_t>(sizeof(float));
     if(!m_resultMemory.create(resultMemorySize))
     {
         qDebug() << "Couldn't create result memory: " << m_resultMemory.error().c_str();
         return;
     }
 
-    float* resultPtr = static_cast<float*>(m_resultMemory.data());
+    auto* resultPtr = static_cast<float*>(m_resultMemory.data());
     memset(resultPtr, 0, resultMemorySize);
 }
 
@@ -465,9 +474,9 @@ void BenchmarkManager::saveResult(const QString& filename, bool aborted)
     {
         QJsonObject logObj;
         logObj["date"] = QDateTime::currentDateTime().toString();
-        logObj["spp_budget"] = m_currentSceneInfo.get<int>("max_spp");
-        logObj["samples_budget"] = getInitSampleBudget(m_currentSceneInfo);
-        logObj["used_samples"] = getInitSampleBudget(m_currentSceneInfo) - m_currentSampleBudget;
+        logObj["spp_budget"] = static_cast<qint64>(m_currentSceneInfo.get<int64_t>("max_spp"));
+        logObj["samples_budget"] = static_cast<qint64>(getInitSampleBudget(m_currentSceneInfo));
+        logObj["used_samples"] = static_cast<qint64>(getInitSampleBudget(m_currentSceneInfo) - m_currentSampleBudget);
         logObj["aborted"] = aborted;
         int h, m, s, ms;
         {
@@ -491,7 +500,7 @@ void BenchmarkManager::saveResult(const QString& filename, bool aborted)
 
     // Write resulting image
     auto result = static_cast<float*>(m_resultMemory.data());
-    int xres, yres;
+    int64_t xres, yres;
     getResolution(m_currentSceneInfo, &xres, &yres);
     saveExr((filename + ".exr").toStdString(), result, xres, yres);
     memset(result, 0, xres*yres*3*sizeof(float));

@@ -64,9 +64,9 @@ float *BenchmarkClient::getResultBuffer()
     return static_cast<float*>(m_resultMemory.data());
 }
 
-int BenchmarkClient::evaluateSamples(SamplesCountUnit unit, int numSamples)
+int64_t BenchmarkClient::evaluateSamples(SamplesCountUnit unit, int64_t numSamples)
 {
-    return m_client->call("EVALUATE_SAMPLES", unit == SAMPLES_PER_PIXEL, numSamples).as<int>();
+    return m_client->call("EVALUATE_SAMPLES", unit == SAMPLES_PER_PIXEL, numSamples).as<int64_t>();
 }
 
 void BenchmarkClient::sendResult()
@@ -77,7 +77,7 @@ void BenchmarkClient::sendResult()
 void BenchmarkClient::fetchSceneInfo()
 {
     m_sceneInfo = m_client->call("GET_SCENE_DESCRIPTION").as<SceneInfo>();
-    m_maxNumSamples = m_sceneInfo.get<int>("max_samples");
+    m_maxNumSamples = m_sceneInfo.get<int64_t>("max_samples");
 
     if(!m_resultMemory.attach())
         throw std::runtime_error("Couldn't attach result shared memory:\n - " + m_resultMemory.error());

@@ -82,8 +82,8 @@ private slots:
     void getSceneInfo()
     {
         auto info = m_client->getSceneInfo();
-        QCOMPARE(info.get<int>("width"), 10);
-        QCOMPARE(info.get<int>("height"), 20);
+        QCOMPARE(info.get<int64_t>("width"), INT64_C(10));
+        QCOMPARE(info.get<int64_t>("height"), INT64_C(20));
     }
 
     void setSampleLayout()
@@ -94,6 +94,16 @@ private slots:
         QCOMPARE(layout.hasInput("IMAGE_X"), m_server->getLayout().hasInput("IMAGE_X"));
         QCOMPARE(layout.hasInput("IMAGE_Y"), m_server->getLayout().hasInput("IMAGE_Y"));
         QCOMPARE(layout.hasInput("IMAGE_Z"), m_server->getLayout().hasInput("IMAGE_Z"));
+    }
+
+    void testSamplesSize()
+    {
+        constexpr int64_t w = 2000;
+        constexpr int64_t h = 2000;
+        constexpr int64_t spp = 128;
+        constexpr int64_t sampleSize = 30;
+        constexpr auto total = w * h * spp * sampleSize;
+        QVERIFY(total < std::numeric_limits<size_t>::max());
     }
 
 private:

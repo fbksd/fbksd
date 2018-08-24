@@ -40,7 +40,7 @@ public:
      *
      * \param[in] SampleLayout: layout
      */
-    void setParameters(int maxSPP, const SampleLayout& layout);
+    void setParameters(int64_t maxSPP, const SampleLayout& layout);
 
     /**
      * \brief Compute the samples values for the given samples positions.
@@ -53,21 +53,7 @@ public:
      * \param[out] output       Output sample values.
      * \return Number of samples evaluated.
      */
-    int evaluateSamples(bool isSPP, int numSamples);
-
-    /**
-     * \brief Overloaded method.
-     *
-     * Receives a CropWindow that specifies the region where the samples must be located.
-     */
-    int evaluateSamples(bool isSPP, int numSamples, const CropWindow& crop);
-
-    /**
-     * \brief Overloaded method.
-     *
-     * Receives a pdf that specifies distribution that the samples should follow.
-     */
-    int evaluateAdaptiveSamples(bool isSPP, int numSamples);
+    int64_t evaluateSamples(bool isSPP, int64_t numSamples);
 
     /**
      * \brief Finishes the rendering system for the current scene.

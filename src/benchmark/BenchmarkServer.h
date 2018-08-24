@@ -22,7 +22,7 @@ public:
     using SetParameters
         = std::function<void(const SampleLayout& layout)>;
     using EvaluateSamples
-        = std::function<int(bool isSPP, int numSamples)>;
+        = std::function<int(bool isSPP, int64_t numSamples)>;
     using SendResult
         = std::function<void()>;
 
@@ -43,11 +43,6 @@ public:
     void stop();
 
 private:
-    SceneInfo getSceneInfo();
-    int setSampleLayout(const SampleLayout& layout);
-    int evaluateSamples(bool isSpp, int numSamples);
-    void sendResult();
-
     std::unique_ptr<rpc::server> m_server;
     bool m_getSceneInfoSet = false;
     bool m_setParametersSet = false;
