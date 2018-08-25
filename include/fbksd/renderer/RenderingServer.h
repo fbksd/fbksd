@@ -31,9 +31,9 @@ public:
     using GetSceneInfo
         = std::function<SceneInfo()>;
     using SetParameters
-        = std::function<void(int maxSPP, const SampleLayout& layout, float* samplesBuffer, float* pdfBuffer)>;
+        = std::function<void(int maxSPP, const SampleLayout& layout, float* samplesBuffer)>;
     using EvaluateSamples
-        = std::function<void(bool isSPP, int numSamples, int* resultSize)>;
+        = std::function<int64_t(bool isSPP, int64_t numSamples)>;
     using Finish
         = std::function<void()>;
 
@@ -41,13 +41,13 @@ public:
 
     ~RenderingServer();
 
-    void onGetSceneInfo(GetSceneInfo callback);
+    void onGetSceneInfo(const GetSceneInfo& callback);
 
-    void onSetParameters(SetParameters callback);
+    void onSetParameters(const SetParameters& callback);
 
-    void onEvaluateSamples(EvaluateSamples callback);
+    void onEvaluateSamples(const EvaluateSamples& callback);
 
-    void onFinish(Finish callback);
+    void onFinish(const Finish& callback);
 
     void run();
 
@@ -55,13 +55,12 @@ private:
     SceneInfo _getSceneInfo();
     void _detachMemory();
     void _setParameters(int maxSpp, const SampleLayout& layout);
-    int _evaluateSamples(bool isSPP, int numSamples);
+    int64_t _evaluateSamples(bool isSPP, int64_t numSamples);
     void _finishRender();
 
     std::unique_ptr<rpc::server> m_server;
     SharedMemory m_samplesMemory;
-    SharedMemory m_pdfMemory;
-    int m_pixelCount;
+    int64_t m_pixelCount;
 
     GetSceneInfo m_getSceneInfo;
     SetParameters m_setParameters;

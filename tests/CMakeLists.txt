@@ -10,7 +10,17 @@ function(add_exec_test test_name test_file)
 endfunction(add_exec_test)
 
 
+add_subdirectory(mock)
+
 add_exec_test(TestSharedMemory core/TestSharedMemory.cpp)
 add_exec_test(TestBenchmarkClient libclient/TestBenchmarkClient.cpp
     fbksd::client
+)
+add_exec_test(TestBenchmarkManager libbenchmark/TestBenchmarkManager.cpp
+    fbksd::libbenchmark
+)
+target_compile_definitions(TestBenchmarkManager
+    PRIVATE
+        -DRENDERER_FILE="$<TARGET_FILE:mockrenderer>"
+        -DCLIENT_FILE="$<TARGET_FILE:mockclient>"
 )

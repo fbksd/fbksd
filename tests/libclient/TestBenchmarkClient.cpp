@@ -61,11 +61,6 @@ private:
     SharedMemory m_samplesShm;
 };
 
-namespace
-{
-
-}
-
 
 class TestBenchmarkClient : public QObject
 {

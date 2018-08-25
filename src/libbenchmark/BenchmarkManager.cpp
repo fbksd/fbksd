@@ -152,6 +152,7 @@ void BenchmarkManager::runScene(const QString& rendererPath,
     if(exitType != RENDERER_CRASH)
     {
         m_renderClient->finishRender();
+        renderingServer.kill();
         renderingServer.waitForFinished();
     }
 }
