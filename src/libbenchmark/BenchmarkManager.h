@@ -23,6 +23,13 @@ public:
     ~BenchmarkManager();
 
     /**
+     * @brief runPassive
+     *
+     * @pre Rendering server started.
+     */
+    void runPassive();
+
+    /**
      * \brief Runs the benchmark using the given renderer and scene.
      *
      * \param renderPath    Path of the renderer executable
@@ -58,7 +65,7 @@ private:
         RENDERER_CRASH
     };
 
-    void allocateSharedMemory(int64_t);
+    void allocateResultShm(int64_t);
     ProcessExitStatus startEventLoop(QProcess* renderer, QProcess* asr);
     void startProcess(const QString& execPath, const QString& arg, QProcess& process);
     void saveResult(const QString& filename, bool aborted);

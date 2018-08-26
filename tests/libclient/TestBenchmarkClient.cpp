@@ -1,65 +1,26 @@
 #include "fbksd/client/BenchmarkClient.h"
+#include "BenchmarkManager.h"
+#include "tcp_utils.h"
 #include <QtTest>
-#include <rpc/server.h>
+#include <cmath>
 
-
-class ServerMock
+namespace
 {
-public:
-    ServerMock()
+void startProcess(const QString& execPath, const QStringList& args, QProcess* process)
+{
+    QString logFilename = QFileInfo(execPath).baseName().append(".log");
+    process->setStandardOutputFile(logFilename);
+    process->setStandardErrorFile(logFilename);
+    process->setWorkingDirectory(QFileInfo(execPath).absolutePath());
+    process->start(QFileInfo(execPath).absoluteFilePath(), args);
+    if(!process->waitForStarted(-1))
     {
-        m_server = std::make_unique<rpc::server>("127.0.0.1", 2226);
-        m_server->bind("GET_SCENE_DESCRIPTION",
-                       [this](){ return onGetSceneInfo(); } );
-        m_server->bind("SET_SAMPLE_LAYOUT",
-                       [this](const SampleLayout& layout){ return onSetLayout(layout); });
-        m_server->bind("EVALUATE_SAMPLES",
-                       [this](bool isSpp, int numSamples){ return onEvaluateSamples(isSpp, numSamples); });
-        m_server->bind("SEND_RESULT",
-                       [this](){ onSendResult(); });
-
-        m_resultShm.setKey("SAMPLES_MEMORY");
-        m_resultShm.create(sizeof(float));
-        m_samplesShm.setKey("RESULT_MEMORY");
-        m_samplesShm.create(sizeof(float));
+        qDebug() << "Error starting process " << execPath;
+        qDebug() << "Error code = " << process->error();
+        exit(EXIT_FAILURE);
     }
-
-    const SampleLayout& getLayout() const
-    {
-        return m_layout;
-    }
-
-    void run()
-    { m_server->async_run(); }
-
-private:
-    SceneInfo onGetSceneInfo()
-    {
-        SceneInfo info;
-        info.set("width", 10);
-        info.set("height", 20);
-        return info;
-    }
-
-    void onSetLayout(const SampleLayout& layout)
-    {
-        m_layout = layout;
-    }
-
-    int onEvaluateSamples(bool isSPP, int numSamples)
-    {
-    }
-
-    void onSendResult()
-    {
-
-    }
-
-    std::unique_ptr<rpc::server> m_server;
-    SampleLayout m_layout;
-    SharedMemory m_resultShm;
-    SharedMemory m_samplesShm;
-};
+}
+}
 
 
 class TestBenchmarkClient : public QObject
@@ -68,42 +29,85 @@ class TestBenchmarkClient : public QObject
 private slots:
     void initTestCase()
     {
-        m_server = std::make_unique<ServerMock>();
-        m_server->run();
-
+        m_rendererProcess = std::make_unique<QProcess>();
+        startProcess(RENDERER_FILE, {"--img-size", "300x300", "--spp", "4"}, m_rendererProcess.get());
+        waitPortOpen(2227);
+        m_manager = std::make_unique<BenchmarkManager>();
+        m_manager->runPassive();
+        waitPortOpen(2226);
         m_client = std::make_unique<BenchmarkClient>();
     }
 
     void getSceneInfo()
     {
         auto info = m_client->getSceneInfo();
-        QCOMPARE(info.get<int64_t>("width"), INT64_C(10));
-        QCOMPARE(info.get<int64_t>("height"), INT64_C(20));
+        m_width = info.get<int64_t>("width");
+        m_height = info.get<int64_t>("height");
+        m_spp = info.get<int64_t>("max_spp");
+        QCOMPARE(m_width, INT64_C(300));
+        QCOMPARE(m_height, INT64_C(300));
+        QCOMPARE(m_spp, INT64_C(4));
     }
 
     void setSampleLayout()
     {
         SampleLayout layout;
-        layout("IMAGE_X", SampleLayout::INPUT)("IMAGE_Y", SampleLayout::INPUT);
+        layout("IMAGE_X")("IMAGE_Y")("COLOR_R")("COLOR_G")("COLOR_B");
         m_client->setSampleLayout(layout);
-        QCOMPARE(layout.hasInput("IMAGE_X"), m_server->getLayout().hasInput("IMAGE_X"));
-        QCOMPARE(layout.hasInput("IMAGE_Y"), m_server->getLayout().hasInput("IMAGE_Y"));
-        QCOMPARE(layout.hasInput("IMAGE_Z"), m_server->getLayout().hasInput("IMAGE_Z"));
+        m_sampleSize = layout.getSampleSize();
     }
 
-    void testSamplesSize()
+    void evaluateSamples()
     {
-        constexpr int64_t w = 2000;
-        constexpr int64_t h = 2000;
-        constexpr int64_t spp = 128;
-        constexpr int64_t sampleSize = 30;
-        constexpr auto total = w * h * spp * sampleSize;
-        QVERIFY(total < std::numeric_limits<size_t>::max());
+        auto ncp = m_client->evaluateSamples(BenchmarkClient::SAMPLES_PER_PIXEL, m_spp);
+        QCOMPARE(ncp, m_spp * m_width * m_height);
+
+        float* samples = m_client->getSamplesBuffer();
+        for(int64_t y = 0; y < m_height; ++y)
+        for(int64_t x = 0; x < m_width; ++x)
+        {
+            float* pixel =  &samples[y*m_width*m_spp*m_sampleSize + x*m_sampleSize*m_spp];
+            for(int64_t s = 0; s < m_spp; ++s)
+            for(int64_t c = 0; c < m_sampleSize; ++c)
+            {
+                float v =  pixel[s*m_sampleSize + c];
+                float exp = getValue(x, y, s, c);
+                if(!qFuzzyCompare(v, exp))
+                {
+                    QWARN(QString("pixel = (%1, %2); sample = %3; component = %4")
+                          .arg(x).arg(y).arg(s).arg(c).toStdString().c_str());
+                    QCOMPARE(v, exp);
+                }
+            }
+        }
+    }
+
+    void cleanupTestCase()
+    {
+        m_client->sendResult();
+        m_rendererProcess->kill();
+        m_rendererProcess->waitForFinished();
     }
 
 private:
-    std::unique_ptr<ServerMock> m_server;
+    float getValue(int64_t x, int64_t y, int64_t s, int64_t c)
+    {
+        constexpr int64_t totalSampleSize = 41;
+        constexpr int64_t map[] = {0, 1, 7, 8, 9};
+        int64_t i = y * m_width * m_spp * totalSampleSize;
+        i += x * totalSampleSize * m_spp;
+        i+= s * totalSampleSize + map[c];
+        int32_t k = i % std::numeric_limits<int32_t>::max();
+        return *reinterpret_cast<float*>(&k);
+    }
+
+    std::unique_ptr<BenchmarkManager> m_manager;
+    std::unique_ptr<QProcess> m_rendererProcess;
     std::unique_ptr<BenchmarkClient> m_client;
+    int64_t m_width = 0;
+    int64_t m_height = 0;
+    int64_t m_spp = 0;
+    int64_t m_sampleSize = 0;
 };
 
 

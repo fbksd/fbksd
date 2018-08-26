@@ -3,6 +3,7 @@
 #include "BenchmarkServer.h"
 #include "RenderClient.h"
 #include "exr_utils.h"
+#include "tcp_utils.h"
 #include "fbksd/renderer/samples.h"
 
 #include <iostream>
@@ -17,7 +18,6 @@
 #include <QDir>
 #include <QJsonObject>
 #include <QJsonDocument>
-#include <boost/asio.hpp>
 
 
 // ==========================================================
@@ -25,25 +25,6 @@
 // ==========================================================
 namespace
 {
-// Waits for the given port to be in use.
-// This is used to wait for a server to open it's port.
-void waitPortOpen(unsigned short port)
-{
-    using namespace boost::asio;
-    using ip::tcp;
-
-    boost::system::error_code ec;
-    do
-    {
-        {
-            io_service svc;
-            tcp::acceptor a(svc);
-            a.open(tcp::v4(), ec) || a.bind({ tcp::v4(), port }, ec);
-        }
-        std::this_thread::sleep_for(std::chrono::seconds(1));
-    }
-    while(ec != error::address_in_use);
-}
 
 // Converts milliseconds to h:m:s:ms format
 void convertMillisecons(int time, int* h, int* m, int* s, int* ms)
@@ -91,6 +72,18 @@ BenchmarkManager::BenchmarkManager():
 
 BenchmarkManager::~BenchmarkManager() = default;
 
+void BenchmarkManager::runPassive()
+{
+    m_benchmarkServer->run(/*2226*/);
+    m_renderClient = std::make_unique<RenderClient>(this, 2227);
+    m_currentSceneInfo = m_renderClient->getSceneInfo();
+    allocateResultShm(getPixelCount(m_currentSceneInfo));
+    m_currentSampleBudget = getInitSampleBudget(m_currentSceneInfo);
+    m_currentExecTime = 0;
+    m_currentRenderingTime = 0;
+    m_timer.start();
+}
+
 void BenchmarkManager::runScene(const QString& rendererPath,
                                 const QString& scenePath,
                                 const QString& filterPath,
@@ -117,7 +110,7 @@ void BenchmarkManager::runScene(const QString& rendererPath,
         m_currentSceneInfo.set("max_spp", spp);
         m_currentSceneInfo.set("max_samples", spp * getPixelCount(m_currentSceneInfo));
     }
-    allocateSharedMemory(getPixelCount(m_currentSceneInfo));
+    allocateResultShm(getPixelCount(m_currentSceneInfo));
 
     int exitType = FILTER_SUCCESS;
     for(int i = 0; i < n; ++i)
@@ -230,7 +223,7 @@ void BenchmarkManager::runAll(const QString& configPath,
                     waitPortOpen(2227);
                     m_renderClient = std::make_unique<RenderClient>(this, 2227);
                     m_currentSceneInfo = m_renderClient->getSceneInfo();
-                    allocateSharedMemory(getPixelCount(m_currentSceneInfo));
+                    allocateResultShm(getPixelCount(m_currentSceneInfo));
                 }
 
                 // NOTE: The SceneInfo from the configuration file has priority over the one from the rendering system, e.g.
@@ -390,7 +383,7 @@ void BenchmarkManager::onSendResult()
 #endif
 }
 
-void BenchmarkManager::allocateSharedMemory(int64_t pixelCount)
+void BenchmarkManager::allocateResultShm(int64_t pixelCount)
 {
     if(m_resultMemory.isAttached())
         m_resultMemory.detach();

@@ -14,14 +14,16 @@ set(HEADERS BenchmarkManager.h
             BenchmarkServer.h
             CfgParser.h
             RenderClient.h
-            exr_utils.h)
+            exr_utils.h
+            tcp_utils.h)
 
 # source files
 set(SRCS BenchmarkManager.cpp
          BenchmarkServer.cpp
          CfgParser.cpp
          RenderClient.cpp
-         exr_utils.cpp)
+         exr_utils.cpp
+         tcp_utils.cpp)
 
 add_library(libbenchmark ${SRCS} ${HEADERS})
 target_link_libraries(libbenchmark PUBLIC core Qt5::Core ${OPENEXR_LIBRARIES} Boost::system)
