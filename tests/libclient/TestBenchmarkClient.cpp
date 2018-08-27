@@ -92,6 +92,8 @@ private slots:
 private:
     float getValue(int64_t x, int64_t y, int64_t s, int64_t c)
     {
+        // FIXME: This function produces subnormal floats,
+        // that may not be very good (lower performance).
         constexpr int64_t totalSampleSize = 41;
         constexpr int64_t map[] = {0, 1, 7, 8, 9};
         int64_t i = y * m_width * m_spp * totalSampleSize;

@@ -26,6 +26,8 @@ float rand()
 
 float getValue(int64_t x, int64_t y, int64_t s, int64_t c)
 {
+    // FIXME: This function produces subnormal floats,
+    // that may not be very good (lower performance).
     constexpr int64_t totalSampleSize = 41;
     int64_t i = y * g_width * g_spp * totalSampleSize;
     i += x * totalSampleSize * g_spp;
