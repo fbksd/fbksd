@@ -296,8 +296,8 @@ private:
 
     static void setLayout(const SampleLayout& layout);
 
-    static int sampleSize;
-    static int numSamples;
+    static int64_t sampleSize;
+    static int64_t numSamples;
     static float* samples;
     static std::vector<std::pair<int, int>> inputParameterIndices;
     static std::vector<std::pair<int, int>> outputParameterIndices;
