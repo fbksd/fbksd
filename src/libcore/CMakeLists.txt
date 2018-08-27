@@ -4,7 +4,8 @@ find_package(Threads)
 set(HEADERS_PREFIX ${PROJECT_SOURCE_DIR}/include/fbksd/core)
 
 # header files
-set(HEADERS ${HEADERS_PREFIX}/Definitions.h
+set(HEADERS ${HEADERS_PREFIX}/Point.h
+            ${HEADERS_PREFIX}/Definitions.h
             ${HEADERS_PREFIX}/SampleLayout.h
             ${HEADERS_PREFIX}/SceneInfo.h
             ${HEADERS_PREFIX}/SharedMemory.h)

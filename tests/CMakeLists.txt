@@ -21,6 +21,7 @@ target_compile_definitions(TestBenchmarkClient
     PRIVATE
         -DRENDERER_FILE="$<TARGET_FILE:mockrenderer>"
 )
+add_dependencies(TestBenchmarkClient mockrenderer)
 
 add_exec_test(TestBenchmarkManager libbenchmark/TestBenchmarkManager.cpp
     fbksd::libbenchmark
@@ -30,3 +31,4 @@ target_compile_definitions(TestBenchmarkManager
         -DRENDERER_FILE="$<TARGET_FILE:mockrenderer>"
         -DCLIENT_FILE="$<TARGET_FILE:mockclient>"
 )
+add_dependencies(TestBenchmarkClient mockrenderer mockrenderer)

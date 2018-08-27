@@ -48,8 +48,8 @@ void SampleBuffer::setLayout(const SampleLayout& layout)
 // ======================================================
 
 // Static initialization
-int SamplesPipe::sampleSize = 0;
-int SamplesPipe::numSamples = 0;
+int64_t SamplesPipe::sampleSize = 0;
+int64_t SamplesPipe::numSamples = 0;
 float* SamplesPipe::samples = nullptr;
 std::vector<std::pair<int, int>> SamplesPipe::inputParameterIndices;
 std::vector<std::pair<int, int>> SamplesPipe::outputParameterIndices;
@@ -79,19 +79,17 @@ size_t SamplesPipe::getPosition()
 SampleBuffer SamplesPipe::getBuffer()
 {
     SampleBuffer buffer;
-    for(size_t i = 0; i < inputParameterIndices.size(); ++i)
-        buffer.paramentersBuffer[inputParameterIndices[i].first] = currentSamplePtr[inputParameterIndices[i].second];
-
+    for(const auto& pair: inputParameterIndices)
+        buffer.paramentersBuffer[pair.first] = currentSamplePtr[pair.second];
     return buffer;
 }
 
 SamplesPipe& SamplesPipe::operator<<(const SampleBuffer& buffer)
 {
-    for(size_t i = 0; i < outputParameterIndices.size(); ++i)
-        currentSamplePtr[outputParameterIndices[i].second] = buffer.paramentersBuffer[outputParameterIndices[i].first];
-    for(size_t i = 0; i < outputFeatureIndices.size(); ++i)
-        currentSamplePtr[outputFeatureIndices[i].second] = buffer.featuresBuffer[outputFeatureIndices[i].first];
-
+    for(const auto& pair: outputParameterIndices)
+        currentSamplePtr[pair.second] = buffer.paramentersBuffer[pair.first];
+    for(const auto& pair: outputFeatureIndices)
+        currentSamplePtr[pair.second] = buffer.featuresBuffer[pair.first];
     currentSamplePtr += sampleSize;
     return *this;
 }
