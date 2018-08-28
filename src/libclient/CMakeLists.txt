@@ -1,5 +1,4 @@
 
-
 set(HEADERS_PREFIX ${PROJECT_SOURCE_DIR}/include/fbksd/client)
 
 # header files
@@ -10,7 +9,7 @@ set(SRCS BenchmarkClient.cpp)
 
 add_library(client ${SRCS} ${HEADERS})
 add_library(fbksd::client ALIAS client)
-target_link_libraries(client PUBLIC core)
+target_link_libraries(client PUBLIC core PRIVATE fbksd::libbenchmark)
 set_target_properties(client PROPERTIES OUTPUT_NAME "fbksd-client")
 install(TARGETS client
     EXPORT fbksdTargets

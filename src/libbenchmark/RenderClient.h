@@ -40,7 +40,7 @@ public:
      *
      * \param[in] SampleLayout: layout
      */
-    void setParameters(int64_t maxSPP, const SampleLayout& layout);
+    void setParameters(const SampleLayout& layout);
 
     /**
      * \brief Compute the samples values for the given samples positions.
@@ -53,7 +53,7 @@ public:
      * \param[out] output       Output sample values.
      * \return Number of samples evaluated.
      */
-    int64_t evaluateSamples(bool isSPP, int64_t numSamples);
+    bool evaluateSamples(int64_t spp, int64_t remainintCount);
 
     /**
      * \brief Finishes the rendering system for the current scene.

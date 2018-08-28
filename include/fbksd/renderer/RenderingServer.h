@@ -1,7 +1,7 @@
 #ifndef RENDERINGSERVER_H
 #define RENDERINGSERVER_H
 
-#include "samples.h"
+#include "SamplesPipe.h"
 #include "fbksd/core/Definitions.h"
 #include "fbksd/core/SharedMemory.h"
 #include <map>
@@ -31,9 +31,9 @@ public:
     using GetSceneInfo
         = std::function<SceneInfo()>;
     using SetParameters
-        = std::function<void(int maxSPP, const SampleLayout& layout, float* samplesBuffer)>;
+        = std::function<void(const SampleLayout& layout)>;
     using EvaluateSamples
-        = std::function<int64_t(bool isSPP, int64_t numSamples)>;
+        = std::function<bool(int64_t spp, int64_t remainingCount)>;
     using Finish
         = std::function<void()>;
 
@@ -54,8 +54,8 @@ public:
 private:
     SceneInfo _getSceneInfo();
     void _detachMemory();
-    void _setParameters(int maxSpp, const SampleLayout& layout);
-    int64_t _evaluateSamples(bool isSPP, int64_t numSamples);
+    void _setParameters(const SampleLayout& layout);
+    bool _evaluateSamples(int64_t spp, int64_t remainingCount);
     void _finishRender();
 
     std::unique_ptr<rpc::server> m_server;

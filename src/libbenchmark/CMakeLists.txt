@@ -26,8 +26,12 @@ set(SRCS BenchmarkManager.cpp
          tcp_utils.cpp)
 
 add_library(libbenchmark ${SRCS} ${HEADERS})
+add_library(fbksd::libbenchmark ALIAS libbenchmark)
 target_link_libraries(libbenchmark PUBLIC core Qt5::Core ${OPENEXR_LIBRARIES} Boost::system)
-target_include_directories(libbenchmark PUBLIC ${CMAKE_CURRENT_LIST_DIR})
+target_include_directories(libbenchmark
+    PUBLIC
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_LIST_DIR}>
+)
 if(FBKSD_MANUAL_RENDERER)
     target_compile_definitions(libbenchmark PRIVATE -DMANUAL_RENDERER)
 endif()
@@ -35,4 +39,8 @@ if(FBKSD_MANUAL_CLIENT)
     target_compile_definitions(libbenchmark PRIVATE -DMANUAL_ASR)
 endif()
 
-add_library(fbksd::libbenchmark ALIAS libbenchmark)
+install(TARGETS libbenchmark
+    EXPORT fbksdTargets
+    LIBRARY DESTINATION lib
+    ARCHIVE DESTINATION lib
+)

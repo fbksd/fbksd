@@ -3,10 +3,12 @@ set(HEADERS_PREFIX ${PROJECT_SOURCE_DIR}/include/fbksd/renderer)
 
 # header files
 set(HEADERS ${HEADERS_PREFIX}/RenderingServer.h
-            ${HEADERS_PREFIX}/samples.h)
+            ${HEADERS_PREFIX}/samples.h
+            ${HEADERS_PREFIX}/SamplesPipe.h)
 
 # source files
 set(SRCS RenderingServer.cpp
+         SamplesPipe.cpp
          samples.cpp )
 
 add_library(renderer ${SRCS} ${HEADERS})

@@ -72,11 +72,14 @@ BenchmarkManager::BenchmarkManager():
 
 BenchmarkManager::~BenchmarkManager() = default;
 
-void BenchmarkManager::runPassive()
+void BenchmarkManager::runPassive(int spp)
 {
+    m_passiveMode = true;
     m_benchmarkServer->run(/*2226*/);
     m_renderClient = std::make_unique<RenderClient>(this, 2227);
     m_currentSceneInfo = m_renderClient->getSceneInfo();
+    m_currentSceneInfo.set("max_spp", spp);
+    m_currentSceneInfo.set("max_samples", spp * getPixelCount(m_currentSceneInfo));
     allocateResultShm(getPixelCount(m_currentSceneInfo));
     m_currentSampleBudget = getInitSampleBudget(m_currentSceneInfo);
     m_currentExecTime = 0;
@@ -342,8 +345,7 @@ int BenchmarkManager::onSetSampleLayout(const SampleLayout& layout)
         }
     }
 
-    auto spp = m_currentSceneInfo.get<int64_t>("max_spp");
-    m_renderClient->setParameters(spp, layout);
+    m_renderClient->setParameters(layout);
 
     m_timer.start();
     return OK;
@@ -357,12 +359,10 @@ int64_t BenchmarkManager::onEvaluateSamples(bool isSPP, int64_t numSamples)
     auto numGenSamples = std::min(m_currentSampleBudget, isSPP ? numSamples * numPixels : numSamples);
     m_currentSampleBudget = m_currentSampleBudget - numGenSamples;
 
+    auto spp = numGenSamples / numPixels;
+    auto remaining = numGenSamples % numPixels;
     m_renderTimer.start();
-    // if number of allowed samples to compute can be expressed as spp
-    if(isSPP && ((numGenSamples % numPixels) == 0))
-        numGenSamples = m_renderClient->evaluateSamples(true, numGenSamples / numPixels);
-    else
-        numGenSamples = m_renderClient->evaluateSamples(false, numGenSamples);
+    m_renderClient->evaluateSamples(spp, remaining);
     m_currentRenderingTime += m_renderTimer.elapsed();
 
     m_timer.start();
@@ -378,8 +378,11 @@ void BenchmarkManager::onSendResult()
     convertMillisecons(m_currentRenderingTime, &h, &m, &s, &ms);
     qDebug("Render execution time = %02d:%02d:%02d:%03d", h, m, s, ms);
 
+    if(m_passiveMode)
+        saveResult("result", false);
+
 #ifdef MANUAL_ASR
-    saveResult("result.exr", false);
+    saveResult("result", false);
 #endif
 }
 

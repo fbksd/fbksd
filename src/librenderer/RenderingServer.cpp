@@ -9,13 +9,19 @@ RenderingServer::RenderingServer() :
     m_server(std::make_unique<rpc::server>("127.0.0.1", 2227)),
     m_samplesMemory("SAMPLES_MEMORY")
 {
-    m_server->bind("GET_SCENE_DESCRIPTION", [this](){return _getSceneInfo();});
-    m_server->bind("SET_PARAMETERS", [this](int maxSpp, const SampleLayout& layout)
-    { _setParameters(maxSpp, layout); });
-    m_server->bind("DETACH_MEMORY", [this](){ _detachMemory(); });
-    m_server->bind("EVALUATE_SAMPLES", [this](bool isSpp, int64_t numSamples){ return _evaluateSamples(isSpp, numSamples); });
-    m_server->bind("FINISH_RENDER", [this](){ _finishRender(); });
+    m_server->bind("GET_SCENE_DESCRIPTION",
+        [this](){return _getSceneInfo();});
+    m_server->bind("SET_PARAMETERS",
+        [this](const SampleLayout& layout){ _setParameters(layout); });
+    m_server->bind("DETACH_MEMORY",
+        [this](){ _detachMemory(); });
+    m_server->bind("EVALUATE_SAMPLES",
+        [this](int64_t spp, int64_t remainingCount){ return _evaluateSamples(spp, remainingCount); });
+    m_server->bind("FINISH_RENDER",
+        [this](){ _finishRender(); });
 }
+
+RenderingServer::~RenderingServer() = default;
 
 void RenderingServer::onGetSceneInfo(const GetSceneInfo& callback)
 {
@@ -42,8 +48,6 @@ void RenderingServer::run()
     m_server->run();
 }
 
-RenderingServer::~RenderingServer() = default;
-
 SceneInfo RenderingServer::_getSceneInfo()
 {
     SceneInfo scene = m_getSceneInfo();
@@ -56,20 +60,18 @@ void RenderingServer::_detachMemory()
     m_samplesMemory.detach();
 }
 
-void RenderingServer::_setParameters(int maxSpp, const SampleLayout& layout)
+void RenderingServer::_setParameters(const SampleLayout& layout)
 {
     if(!m_samplesMemory.attach())
         std::cout << m_samplesMemory.error() << std::endl;
 
-    SamplesPipe::setLayout(layout);
-    SamplesPipe::samples = static_cast<float*>(m_samplesMemory.data());
-    m_setParameters(maxSpp, layout, static_cast<float*>(m_samplesMemory.data()));
+    SamplesPipe::init(layout, static_cast<float*>(m_samplesMemory.data()));
+    m_setParameters(layout);
 }
 
-int64_t RenderingServer::_evaluateSamples(bool isSPP, int64_t numSamples)
+bool RenderingServer::_evaluateSamples(int64_t spp, int64_t remainingCount)
 {
-    SamplesPipe::numSamples = isSPP ? numSamples * m_pixelCount : numSamples;
-    return m_evalSamples(isSPP, numSamples);
+    return m_evalSamples(spp, remainingCount);
 }
 
 void RenderingServer::_finishRender()

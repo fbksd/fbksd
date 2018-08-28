@@ -13,7 +13,6 @@ int64_t g_height = 200;
 int64_t g_spp = 4;
 
 SampleLayout g_layout;
-float* g_samples = nullptr;
 
 
 float rand()
@@ -51,27 +50,21 @@ SceneInfo getSceneInfo()
     return info;
 }
 
-void setLayout(int maxSPP, const SampleLayout& layout, float* samplesBuffer)
+void setLayout(const SampleLayout& layout)
 {
-    g_spp = maxSPP;
     g_layout = layout;
-    g_samples = samplesBuffer;
 }
 
-int64_t evaluateSamples(bool isSPP, int64_t numSamples)
+bool evaluateSamples(int64_t spp, int64_t remainingCount)
 {
-    auto numPixels = g_width * g_height;
-    auto totalNumSamples = isSPP ? numPixels * numSamples : numSamples;
-
-    int64_t spp = isSPP ? numSamples : totalNumSamples / (float)(numPixels);
-
+    g_spp = spp;
     SamplesPipe pipe;
     SampleBuffer sampleBuffer = pipe.getBuffer();
 
     for(int64_t y = 0; y < g_height; ++y)
     for(int64_t x = 0; x < g_width; ++x)
     {
-        pipe.seek(x, y, g_spp, g_width);
+        pipe.seek(x, y, spp, g_width);
         for(int64_t s = 0; s < spp; ++s)
         {
             int i = 0;
@@ -120,7 +113,68 @@ int64_t evaluateSamples(bool isSPP, int64_t numSamples)
         }
     }
 
-    return totalNumSamples;
+    return true;
+}
+
+bool evaluateSamples1(int64_t spp, int64_t remainingCount)
+{
+    g_spp = spp;
+    SamplesPipe pipe;
+    SampleBuffer sampleBuffer = pipe.getBuffer();
+
+    for(int64_t y = 0; y < g_height; ++y)
+    for(int64_t x = 0; x < g_width; ++x)
+    {
+        pipe.seek(x, y, spp, g_width);
+        for(int64_t s = 0; s < spp; ++s)
+        {
+            int i = 0;
+            sampleBuffer.set(IMAGE_X, x);
+            sampleBuffer.set(IMAGE_Y, y);
+            sampleBuffer.set(LENS_U, rand());
+            sampleBuffer.set(LENS_V, rand());
+            sampleBuffer.set(TIME, rand());
+            sampleBuffer.set(LIGHT_X, rand());
+            sampleBuffer.set(LIGHT_Y, rand());
+            sampleBuffer.set(COLOR_R, rand());
+            sampleBuffer.set(COLOR_G, rand());
+            sampleBuffer.set(COLOR_B, rand());
+            sampleBuffer.set(DEPTH, rand());
+            sampleBuffer.set(DIRECT_LIGHT_R, rand());
+            sampleBuffer.set(DIRECT_LIGHT_G, rand());
+            sampleBuffer.set(DIRECT_LIGHT_B, rand());
+            sampleBuffer.set(WORLD_X, rand());
+            sampleBuffer.set(WORLD_Y, rand());
+            sampleBuffer.set(WORLD_Z, rand());
+            sampleBuffer.set(NORMAL_X, rand());
+            sampleBuffer.set(NORMAL_Y, rand());
+            sampleBuffer.set(NORMAL_Z, rand());
+            sampleBuffer.set(TEXTURE_COLOR_R, rand());
+            sampleBuffer.set(TEXTURE_COLOR_G, rand());
+            sampleBuffer.set(TEXTURE_COLOR_B, rand());
+            sampleBuffer.set(WORLD_X_1, rand());
+            sampleBuffer.set(WORLD_Y_1, rand());
+            sampleBuffer.set(WORLD_Z_1, rand());
+            sampleBuffer.set(NORMAL_X_1, rand());
+            sampleBuffer.set(NORMAL_Y_1, rand());
+            sampleBuffer.set(NORMAL_Z_1, rand());
+            sampleBuffer.set(TEXTURE_COLOR_R_1, rand());
+            sampleBuffer.set(TEXTURE_COLOR_G_1, rand());
+            sampleBuffer.set(TEXTURE_COLOR_B_1, rand());
+            sampleBuffer.set(WORLD_X_NS, rand());
+            sampleBuffer.set(WORLD_Y_NS, rand());
+            sampleBuffer.set(WORLD_Z_NS, rand());
+            sampleBuffer.set(NORMAL_X_NS, rand());
+            sampleBuffer.set(NORMAL_Y_NS, rand());
+            sampleBuffer.set(NORMAL_Z_NS, rand());
+            sampleBuffer.set(TEXTURE_COLOR_R_NS, rand());
+            sampleBuffer.set(TEXTURE_COLOR_G_NS, rand());
+            sampleBuffer.set(TEXTURE_COLOR_B_NS, rand());
+            pipe << sampleBuffer;
+        }
+    }
+
+    return true;
 }
 
 void finish()
@@ -142,6 +196,9 @@ int main(int argc, char* argv[])
     QCommandLineOption sppOpt("spp", "Number of samples per pixel.", "spp");
     sppOpt.setDefaultValue("4");
     parser.addOption(sppOpt);
+    QCommandLineOption sceneOpt("scene", "Scene number.", "scene");
+    sceneOpt.setDefaultValue("0");
+    parser.addOption(sceneOpt);
     parser.process(app);
 
     if(parser.isSet(sizeOpt))
@@ -154,18 +211,27 @@ int main(int argc, char* argv[])
     if(parser.isSet(sppOpt))
         g_spp = parser.value(sppOpt).toInt();
 
+    int scene = 0;
+    if(parser.isSet(sceneOpt))
+        scene = parser.value(sceneOpt).toInt();
+
     std::cout << "img size = " << g_width << " x " << g_height << std::endl;
     std::cout << "spp = " << g_spp << std::endl;
+    std::cout << "scene = " << scene << std::endl;
 
     RenderingServer server;
     server.onGetSceneInfo(&getSceneInfo);
     server.onSetParameters(&setLayout);
-    server.onEvaluateSamples(&evaluateSamples);
+    switch (scene)
+    {
+        case 0:
+            server.onEvaluateSamples(&evaluateSamples);
+            break;
+        case 1:
+            server.onEvaluateSamples(&evaluateSamples1);
+            break;
+    }
     server.onFinish(&finish);
     server.run();
-
-    QTimer timer;
-    QObject::connect(&timer, &QTimer::timeout, &app, &QCoreApplication::quit);
-    timer.start();
-    return app.exec();
+    return 0;
 }

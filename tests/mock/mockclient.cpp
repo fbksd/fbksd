@@ -1,9 +1,10 @@
 #include <fbksd/client/BenchmarkClient.h>
+using namespace fbksd;
 
 
-int main()
+int main(int argc, char* argv[])
 {
-    BenchmarkClient client;
+    BenchmarkClient client(argc, argv);
     SceneInfo scene = client.getSceneInfo();
     const auto w = scene.get<int64_t>("width");
     const auto h = scene.get<int64_t>("height");
@@ -14,7 +15,7 @@ int main()
     client.setSampleLayout(layout);
 
     float* samples = client.getSamplesBuffer();
-    auto resSpp = client.evaluateSamples(BenchmarkClient::SAMPLES_PER_PIXEL, spp);
+    auto resSpp = client.evaluateSamples(SPP(spp));
     if(resSpp == 0)
         return 0;
 
@@ -39,4 +40,5 @@ int main()
     }
 
     client.sendResult();
+    return 0;
 }

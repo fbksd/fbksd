@@ -21,14 +21,14 @@ void RenderClient::detachMemory()
     m_client->call("DETACH_MEMORY");
 }
 
-void RenderClient::setParameters(int64_t maxSPP, const SampleLayout& layout)
+void RenderClient::setParameters(const SampleLayout& layout)
 {
-    m_client->call("SET_PARAMETERS", maxSPP, layout);
+    m_client->call("SET_PARAMETERS", layout);
 }
 
-int64_t RenderClient::evaluateSamples(bool isSPP, int64_t numSamples)
+bool RenderClient::evaluateSamples(int64_t spp, int64_t remainintCount)
 {
-    return m_client->call("EVALUATE_SAMPLES", isSPP, numSamples).as<int64_t>();
+    return m_client->call("EVALUATE_SAMPLES", spp, remainintCount).as<bool>();
 }
 
 void RenderClient::finishRender()

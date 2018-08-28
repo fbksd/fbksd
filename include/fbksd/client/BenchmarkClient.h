@@ -2,14 +2,14 @@
 #define BENCHMARKCLIENT_H
 
 #include "fbksd/core/Definitions.h"
-#include "fbksd/core/SharedMemory.h"
 #include <vector>
 #include <string>
 #include <map>
 #include <memory>
 
-namespace rpc{ class client; };
 
+namespace fbksd
+{
 
 /**
  * \file
@@ -20,6 +20,30 @@ namespace rpc{ class client; };
  * \defgroup BenchmarkClient Benchmark Client Library
  * @{
  */
+
+
+/**
+ * @brief Represents a number of samples given in samples-per-pixel.
+ */
+class SPP
+{
+public:
+    explicit SPP(int64_t value):
+        m_value(value)
+    {}
+
+    int64_t operator=(int64_t v)
+    { m_value = v; }
+
+    void setValue(int64_t v)
+    { m_value = v; }
+
+    int64_t getValue() const
+    { return m_value; }
+
+private:
+    int64_t m_value = 0;
+};
 
 
 /**
@@ -35,28 +59,23 @@ class BenchmarkClient
 {
 public:
     /**
-     * \brief Used to specify the samples counting unit when calling
-     * evaluateSamples().
-     *
-     * Constant                            | Value  | Description
-     * ----------------------------------- | ------ | --------------------------------------------------------------
-     * BenchmarkClient::SAMPLES            | false  | The number of samples should be specified as a plain amount
-     * BenchmarkClient::SAMPLES_PER_PIXEL  | true   | The number of samples should be specified as samples per pixel
-     */
-    enum SamplesCountUnit : bool
-    {
-        SAMPLES = false,
-        SAMPLES_PER_PIXEL = true,
-    };
-
-    /**
      * \brief Connects with the benchmark server.
      *
      * The BenchmarkClient object should be instantiated at the beginning of the main function.
+     *
+     * If you pass the argc and argv parameters from main(), the following command-line options
+     * become available:
+     *     --fbksd-renderer "<renderer_exec> <renderer_args> ..."
+     *         Starts the renderer process with the given arguments.
+     *     --fbksd-spp <value>
+     *         Sets the sample budget available to client.
+     * This allows you to run your client program directly (for debugging purposes, for example).
      */
-    BenchmarkClient();
+    BenchmarkClient(int argc = 0, char* argv[] = nullptr);
 
     BenchmarkClient(const BenchmarkClient&) = delete;
+
+    BenchmarkClient(BenchmarkClient&&) = default;
 
     ~BenchmarkClient();
 
@@ -115,7 +134,16 @@ public:
      * \param[in] unit          The unit used to count samples
      * \param[in] numSamples    The number of samples (according to unit)
      */
-    int64_t evaluateSamples(SamplesCountUnit unit, int64_t numSamples);
+    int64_t evaluateSamples(int64_t numSamples);
+
+    /**
+     * @brief Overloaded method.
+     *
+     * Evaluates an amount of samples given as a multiple of the number of pixels in the image (samples-per-pixel).
+     *
+     * @returns Number of evaluated samples (not in SPP).
+     */
+    int64_t evaluateSamples(SPP spp);
 
     /**
      * \brief Sends the final result (rgb image)
@@ -124,17 +152,15 @@ public:
 
     BenchmarkClient& operator=(const BenchmarkClient&) = delete;
 
-private:
-    void fetchSceneInfo();
+    BenchmarkClient& operator=(BenchmarkClient&&) = default;
 
-    std::unique_ptr<rpc::client> m_client;
-    SharedMemory m_samplesMemory;
-    SharedMemory m_resultMemory;
-    SceneInfo m_sceneInfo;
-    int64_t m_maxNumSamples = 0;
+private:
+    struct Imp;
+    std::unique_ptr<Imp> m_imp;
 };
 
-
 /**@}*/
+
+} // namespace fbksd
 
 #endif

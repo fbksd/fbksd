@@ -1,11 +1,17 @@
 #include "fbksd/client/BenchmarkClient.h"
 #include "fbksd/core/Definitions.h"
+#include "fbksd/core/SharedMemory.h"
+#include "BenchmarkManager.h"
+#include "tcp_utils.h"
 
 #include <rpc/client.h>
 #include <iostream>
+#include <QCoreApplication>
+#include <QCommandLineParser>
+#include <QFileInfo>
+#include <QDebug>
 
-
-MSGPACK_ADD_ENUM(BenchmarkClient::SamplesCountUnit);
+using namespace fbksd;
 
 
 /*
@@ -27,58 +33,132 @@ MSGPACK_ADD_ENUM(BenchmarkClient::SamplesCountUnit);
  * $ ipcs -m | awk '$6 == 0' | tr -s " " | cut -d " " -f 2 | xargs -L1 ipcrm -m
  */
 
-
-BenchmarkClient::BenchmarkClient():
-    m_client(std::make_unique<rpc::client>("127.0.0.1", 2226)),
-    m_samplesMemory("SAMPLES_MEMORY"),
-    m_resultMemory("RESULT_MEMORY")
+namespace{
+void startProcess(const QString& execPath, const QStringList& args, QProcess* process)
 {
-    if(m_samplesMemory.isAttached())
+    process->start(QFileInfo(execPath).absoluteFilePath(), args);
+    if(!process->waitForStarted(-1))
+    {
+        qDebug() << "Error starting process " << execPath;
+        qDebug() << "Error code = " << process->error();
+        exit(EXIT_FAILURE);
+    }
+}
+}
+
+
+struct BenchmarkClient::Imp
+{
+    Imp(int argc, char* argv[]):
+        m_samplesMemory("SAMPLES_MEMORY"),
+        m_resultMemory("RESULT_MEMORY")
+    {
+        if(argc != 0 && argv != nullptr)
+        {
+            QCoreApplication app(argc, argv);
+            QCommandLineParser parser;
+            parser.addVersionOption();
+            QCommandLineOption bypassOpt("fbksd-renderer",
+                                         "Calls a renderer server.",
+                                         "\"<renderer_exec> <renderer_args>\"");
+            parser.addOption(bypassOpt);
+            QCommandLineOption sppOpt("fbksd-spp", "Number of samples per pixel.", "spp");
+            sppOpt.setDefaultValue("1");
+            parser.addOption(sppOpt);
+            parser.process(app);
+            if(parser.isSet(bypassOpt))
+            {
+                int spp = parser.value(sppOpt).toInt();
+                QString renderCall = parser.value(bypassOpt);
+                auto values = renderCall.split(" ");
+                m_rendererProcess = std::make_unique<QProcess>();
+                auto args = values.mid(1, values.size()-1);
+                startProcess(values[0], args, m_rendererProcess.get());
+                waitPortOpen(2227);
+                m_bmkManager = std::make_unique<BenchmarkManager>();
+                m_bmkManager->runPassive(spp);
+                waitPortOpen(2226);
+            }
+        }
+
+        m_client = std::make_unique<rpc::client>("127.0.0.1", 2226);
+    }
+
+    ~Imp()
+    {
+        if(m_rendererProcess)
+        {
+            m_rendererProcess->kill();
+            m_rendererProcess->waitForFinished();
+        }
+    }
+
+    void fetchSceneInfo()
+    {
+        m_sceneInfo = m_client->call("GET_SCENE_DESCRIPTION").as<SceneInfo>();
+        m_maxNumSamples = m_sceneInfo.get<int64_t>("max_samples");
+
+        if(!m_resultMemory.attach())
+            throw std::runtime_error("Couldn't attach result shared memory:\n - " + m_resultMemory.error());
+    }
+
+    std::unique_ptr<rpc::client> m_client;
+    SharedMemory m_samplesMemory;
+    SharedMemory m_resultMemory;
+    SceneInfo m_sceneInfo;
+    int64_t m_maxNumSamples = 0;
+
+    //bypass mode
+    std::unique_ptr<BenchmarkManager> m_bmkManager;
+    std::unique_ptr<QProcess> m_rendererProcess;
+};
+
+
+BenchmarkClient::BenchmarkClient(int argc, char* argv[]):
+    m_imp(std::make_unique<Imp>(argc, argv))
+{
+    if(m_imp->m_samplesMemory.isAttached())
         throw std::logic_error("Shared memory already attached.");
 
-    fetchSceneInfo();
+    m_imp->fetchSceneInfo();
 }
 
 BenchmarkClient::~BenchmarkClient() = default;
 
 SceneInfo BenchmarkClient::getSceneInfo()
 {
-    return m_sceneInfo;
+    return m_imp->m_sceneInfo;
 }
 
 void BenchmarkClient::setSampleLayout(const SampleLayout& layout)
 {
-    m_client->call("SET_SAMPLE_LAYOUT", layout);
+   m_imp-> m_client->call("SET_SAMPLE_LAYOUT", layout);
 
-    if(!m_samplesMemory.attach())
-        throw std::runtime_error("Couldn't attach samples shared memory:\n - " + m_samplesMemory.error());
+    if(!m_imp->m_samplesMemory.attach())
+        throw std::runtime_error("Couldn't attach samples shared memory:\n - " + m_imp->m_samplesMemory.error());
 }
 
 float *BenchmarkClient::getSamplesBuffer()
 {
-    return static_cast<float*>(m_samplesMemory.data());
+    return static_cast<float*>(m_imp->m_samplesMemory.data());
 }
 
 float *BenchmarkClient::getResultBuffer()
 {
-    return static_cast<float*>(m_resultMemory.data());
+    return static_cast<float*>(m_imp->m_resultMemory.data());
 }
 
-int64_t BenchmarkClient::evaluateSamples(SamplesCountUnit unit, int64_t numSamples)
+int64_t BenchmarkClient::evaluateSamples(int64_t numSamples)
 {
-    return m_client->call("EVALUATE_SAMPLES", unit == SAMPLES_PER_PIXEL, numSamples).as<int64_t>();
+    return m_imp->m_client->call("EVALUATE_SAMPLES", false, numSamples).as<int64_t>();
+}
+
+int64_t BenchmarkClient::evaluateSamples(SPP spp)
+{
+    return m_imp->m_client->call("EVALUATE_SAMPLES", true, spp.getValue()).as<int64_t>();
 }
 
 void BenchmarkClient::sendResult()
 {
-    return m_client->send("SEND_RESULT");
-}
-
-void BenchmarkClient::fetchSceneInfo()
-{
-    m_sceneInfo = m_client->call("GET_SCENE_DESCRIPTION").as<SceneInfo>();
-    m_maxNumSamples = m_sceneInfo.get<int64_t>("max_samples");
-
-    if(!m_resultMemory.attach())
-        throw std::runtime_error("Couldn't attach result shared memory:\n - " + m_resultMemory.error());
+    m_imp->m_client->call("SEND_RESULT");
 }

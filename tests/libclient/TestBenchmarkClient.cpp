@@ -4,6 +4,8 @@
 #include <QtTest>
 #include <cmath>
 
+using namespace fbksd;
+
 namespace
 {
 void startProcess(const QString& execPath, const QStringList& args, QProcess* process)
@@ -30,10 +32,10 @@ private slots:
     void initTestCase()
     {
         m_rendererProcess = std::make_unique<QProcess>();
-        startProcess(RENDERER_FILE, {"--img-size", "300x300", "--spp", "4"}, m_rendererProcess.get());
+        startProcess(RENDERER_FILE, {"--img-size", "300x300"}, m_rendererProcess.get());
         waitPortOpen(2227);
         m_manager = std::make_unique<BenchmarkManager>();
-        m_manager->runPassive();
+        m_manager->runPassive(4);
         waitPortOpen(2226);
         m_client = std::make_unique<BenchmarkClient>();
     }
@@ -59,7 +61,7 @@ private slots:
 
     void evaluateSamples()
     {
-        auto ncp = m_client->evaluateSamples(BenchmarkClient::SAMPLES_PER_PIXEL, m_spp);
+        auto ncp = m_client->evaluateSamples(SPP(m_spp));
         QCOMPARE(ncp, m_spp * m_width * m_height);
 
         float* samples = m_client->getSamplesBuffer();

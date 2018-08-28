@@ -27,7 +27,7 @@ public:
      *
      * @pre Rendering server started.
      */
-    void runPassive();
+    void runPassive(int spp);
 
     /**
      * \brief Runs the benchmark using the given renderer and scene.
@@ -94,6 +94,7 @@ private:
     int m_currentExecTime = 0;
     QTime m_renderTimer;
     int m_currentRenderingTime = 0;
+    bool m_passiveMode = false;
 };
 
 #endif // BENCHMARKMANAGER_H
