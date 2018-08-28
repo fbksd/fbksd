@@ -6,11 +6,10 @@
 
 #include <rpc/client.h>
 #include <iostream>
-#include <QCoreApplication>
-#include <QCommandLineParser>
 #include <QFileInfo>
-#include <QDebug>
+#include <boost/program_options.hpp>
 
+namespace po = boost::program_options;
 using namespace fbksd;
 
 
@@ -39,8 +38,8 @@ void startProcess(const QString& execPath, const QStringList& args, QProcess* pr
     process->start(QFileInfo(execPath).absoluteFilePath(), args);
     if(!process->waitForStarted(-1))
     {
-        qDebug() << "Error starting process " << execPath;
-        qDebug() << "Error code = " << process->error();
+        std::cerr << "Error starting process " << execPath.toStdString() << std::endl;
+        std::cerr << "Error code = " << process->errorString().toStdString() << std::endl;
         exit(EXIT_FAILURE);
     }
 }
@@ -55,26 +54,36 @@ struct BenchmarkClient::Imp
     {
         if(argc != 0 && argv != nullptr)
         {
-            QCoreApplication app(argc, argv);
-            QCommandLineParser parser;
-            parser.addVersionOption();
-            QCommandLineOption bypassOpt("fbksd-renderer",
-                                         "Calls a renderer server.",
-                                         "\"<renderer_exec> <renderer_args>\"");
-            parser.addOption(bypassOpt);
-            QCommandLineOption sppOpt("fbksd-spp", "Number of samples per pixel.", "spp");
-            sppOpt.setDefaultValue("1");
-            parser.addOption(sppOpt);
-            parser.process(app);
-            if(parser.isSet(bypassOpt))
+            po::options_description desc("Allowed options");
+            desc.add_options()
+                    ("fbksd-renderer", po::value<std::string>(), "Calls a renderer server.")
+                    ("fbksd-spp", po::value<int>(), "Number of samples poer pixel.");
+
+            po::variables_map vm;
+            po::store(po::command_line_parser(argc, argv).options(desc).allow_unregistered().run(), vm);
+            po::notify(vm);
+
+            if(vm.count("fbksd-renderer") || vm.count("fbksd-spp"))
             {
-                int spp = parser.value(sppOpt).toInt();
-                QString renderCall = parser.value(bypassOpt);
-                auto values = renderCall.split(" ");
-                m_rendererProcess = std::make_unique<QProcess>();
-                auto args = values.mid(1, values.size()-1);
-                startProcess(values[0], args, m_rendererProcess.get());
+                std::cout << "(fbksd) Running in bypass mode." << std::endl;
+                if(vm.count("fbksd-renderer"))
+                {
+                    QString renderCall = QString::fromStdString(vm["fbksd-renderer"].as<std::string>());
+                    std::cout << "(fbksd) Starting renderer with call \"" << renderCall.toStdString() << "\"" << std::endl;
+                    auto values = renderCall.split(" ");
+                    m_rendererProcess = std::make_unique<QProcess>();
+                    auto args = values.mid(1, values.size()-1);
+                    startProcess(values[0], args, m_rendererProcess.get());
+                }
+                std::cout << "(fbksd) Waiting for renderer port..." << std::endl;
                 waitPortOpen(2227);
+                std::cout << "(fbksd) Renderer port open." << std::endl;
+
+                int spp = 1;
+                if(vm.count("fbksd-spp"))
+                    spp = vm["fbksd-spp"].as<int>();
+                std::cout << "(fbksd) spp = " << spp << std::endl;
+
                 m_bmkManager = std::make_unique<BenchmarkManager>();
                 m_bmkManager->runPassive(spp);
                 waitPortOpen(2226);

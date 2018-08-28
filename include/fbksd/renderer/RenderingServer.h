@@ -39,6 +39,10 @@ public:
 
     RenderingServer();
 
+    RenderingServer(const RenderingServer&) = delete;
+
+    RenderingServer(RenderingServer&&) = default;
+
     ~RenderingServer();
 
     void onGetSceneInfo(const GetSceneInfo& callback);
@@ -51,21 +55,13 @@ public:
 
     void run();
 
+    RenderingServer& operator=(const RenderingServer&) = delete;
+
+    RenderingServer& operator=(RenderingServer&&) = default;
+
 private:
-    SceneInfo _getSceneInfo();
-    void _detachMemory();
-    void _setParameters(const SampleLayout& layout);
-    bool _evaluateSamples(int64_t spp, int64_t remainingCount);
-    void _finishRender();
-
-    std::unique_ptr<rpc::server> m_server;
-    SharedMemory m_samplesMemory;
-    int64_t m_pixelCount;
-
-    GetSceneInfo m_getSceneInfo;
-    SetParameters m_setParameters;
-    EvaluateSamples m_evalSamples;
-    Finish m_finish;
+    struct Imp;
+    std::unique_ptr<Imp> m_imp;
 };
 
 /**@}*/
