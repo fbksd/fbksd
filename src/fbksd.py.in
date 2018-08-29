@@ -1,0 +1,1531 @@
+#!/usr/bin/env python3
+
+import argparse
+import os.path
+import sys
+import shutil
+import xml.etree.ElementTree as ET
+from xml.dom import minidom
+from subprocess import call, Popen, PIPE, STDOUT
+import json
+import uuid
+import itertools
+import time
+import http.server
+import socketserver
+
+
+#=============================================
+#                Common paths                #
+#=============================================
+install_prefix_dir = '@INSTALL_PREFIX@'
+scenes_dir         = os.path.join(os.getcwd(), 'scenes')
+renderers_dir      = os.path.join(os.getcwd(), 'renderers')
+denoisers_dir      = os.path.join(os.getcwd(), 'denoisers')
+samplers_dir       = os.path.join(os.getcwd(), 'samplers')
+page_dir           = os.path.join(os.getcwd(), 'page')
+results_dir        = os.path.join(os.getcwd(), 'results')
+current_slot_dir   = os.path.join(results_dir, '.current')
+scenes_profile     = os.path.join(scenes_dir, 'scenes.xml')
+
+
+
+#=============================================
+#               Model classes                #
+#=============================================
+
+class BaseModel():
+    def __init__(self, obj_id):
+        self.id = obj_id
+        self.uuid = uuid.uuid4()
+
+
+class Technique(BaseModel):
+    def __init__(self, obj_id):
+        super().__init__(obj_id)
+        self.name = ''
+        self.full_name = ''
+        self.comment = ''
+        self.citation = ''
+        self.versions = []
+
+
+class Filter(Technique):
+    __nextId = 1
+
+    def __init__(self):
+        super().__init__(Filter.__nextId)
+        Filter.__nextId += 1
+
+
+class Sampler(Technique):
+    __nextId = 1
+
+    def __init__(self):
+        super().__init__(Sampler.__nextId)
+        Sampler.__nextId += 1
+
+
+class TechniqueVersion(BaseModel):
+    def __init__(self, obj_id):
+        super().__init__(obj_id)
+        self.technique = None
+        self.tag = ''
+        self.executable = ''
+        self.message = ''
+        self.status = ''
+        self.results = [] # Result[]
+
+    def has_result(self, scene, spp):
+        return any([True for result in self.results if result.scene is scene and result.spp == spp])
+
+    def get_result(self, scene, spp):
+        results = [result for result in self.results if result.scene is scene and result.spp == spp]
+        if results:
+            return results[0]
+        else:
+            return None
+
+    def get_results(self, scene):
+        r_results = []
+        for r in self.results:
+            if r.scene is scene:
+                r_results.append(r)
+        return r_results
+
+    def get_name(self):
+        return '{}-{}'.format(self.technique.name, self.tag)
+
+
+class FilterVersion(TechniqueVersion):
+    __nextId = 1
+
+    def __init__(self):
+        super().__init__(FilterVersion.__nextId)
+        FilterVersion.__nextId += 1
+
+
+class SamplerVersion(TechniqueVersion):
+    __nextId = 1
+
+    def __init__(self):
+        super().__init__(SamplerVersion.__nextId)
+        SamplerVersion.__nextId += 1
+
+
+class Renderer(BaseModel):
+    __nextId = 1
+
+    def __init__(self):
+        super().__init__(Renderer.__nextId)
+        Renderer.__nextId += 1
+
+        self.name = ''
+        self.path = ''
+        self.scenes = [] # Scene[]
+
+
+class Scene(BaseModel):
+    __nextId = 1
+
+    def __init__(self):
+        super().__init__(Scene.__nextId)
+        Scene.__nextId += 1
+
+        self.name = ''
+        self.path = ''
+        self.ground_truth = ''
+        self.dof_w = 0.0 # depth-of-field weight
+        self.mb_w = 0.0 # motion blur
+        self.ss_w = 0.0 # soft shadow
+        self.glossy_w = 0.0 # glossy
+        self.gi_w = 0.0 # global illumination
+        self.renderer = None # Renderer
+        self.spps = []
+        self.regions = [] # ImageRegion
+
+
+class ImageRegion(BaseModel):
+    __nextId = 1
+
+    def __init__(self):
+        super().__init__(ImageRegion.__nextId)
+        ImageRegion.__nextId += 1
+
+        self.xmin = 0
+        self.ymin = 0
+        self.xmax = 0
+        self.ymax = 0
+        # Weights for each noise source (0.0 - 1.0)
+        self.dof_w = 0.0 # depth-of-field weight
+        self.mb_w = 0.0 # motion blur
+        self.ss_w = 0.0 # soft shadow
+        self.glossy_w = 0.0 # glossy
+        self.gi_w = 0.0 # global illumination
+
+
+class RegionError(BaseModel):
+    __nextId = 1
+
+    def __init__(self):
+        super().__init__(RegionError.__nextId)
+        RegionError.__nextId += 1
+
+        self.mse = 0.0
+        self.psnr = 0.0
+        self.ssim = 0.0
+        self.rmse = 0.0
+        self.region = None # ImageRegion
+        self.result = None # Result
+
+
+class TechniqueResult(BaseModel):
+    def __init__(self, obj_id):
+        super().__init__(obj_id)
+
+        self.scene = None
+        self.spp = 0
+        self.exec_time = 0
+        self.rendering_time = 0
+        self.mse = 0.0
+        self.psnr = 0.0
+        self.ssim = 0.0
+        self.rmse = 0.0
+        self.aborted = False
+        self.region_errors = [] # RegionError[]
+
+
+class Result(TechniqueResult):
+    __nextId = 1
+
+    def __init__(self):
+        super().__init__(Result.__nextId)
+        Result.__nextId += 1
+        self.filter_version = None # SamplerVersion
+
+
+class SamplerResult(TechniqueResult):
+    __nextId = 1
+
+    def __init__(self):
+        super().__init__(SamplerResult.__nextId)
+        SamplerResult.__nextId += 1
+        self.sampler_version = None # FilterVersion
+
+
+class PersistentState:
+    def __init__(self):
+        pass
+
+
+g_filters = {}
+g_filters_names = {}
+g_filters_versions = {}
+g_samplers = {}
+g_samplers_names = {}
+g_samplers_versions = {}
+g_renderers = {}
+g_scenes = {}
+g_scenes_names = {}
+g_persistent_state = None
+g_scenes_loaded = False
+g_filters_loaded = False
+g_samplers_loaded = False
+g_results_loaded = False
+g_samplers_results_loaded = False
+
+
+#=============================================
+#               Procedures                   #
+#=============================================
+
+def init():
+    # results_dir = 'results/'
+    # current_slot_dir = results_dir + '.current'
+    if not os.path.isdir(results_dir):
+        new_slot_name = 'Results 1'
+        new_slot_path = os.path.join(results_dir, new_slot_name)
+        os.makedirs(new_slot_path)
+        os.symlink(new_slot_name, os.path.join(results_dir, '.current'))
+
+
+# Loads the scenes from the scenes_profile file
+def load_scenes():
+    if not os.path.isfile(scenes_profile):
+        return False
+
+    # load all available scenes
+    tree = ET.parse(scenes_profile)
+    root = tree.getroot()
+    for renderer in root.findall('rendering_server'):
+        r = Renderer()
+        r.name = renderer.get('name')
+        r.path = renderer.get('path')
+        for scene in renderer.find('scenes').findall('scene'):
+            s = Scene()
+            s.renderer = r
+            s.name = scene.get('name')
+            s.path = scene.get('path')
+            s.ground_truth = scene.get('ground_truth')
+
+            if scene.find('dof_w') is not None:
+                s.dof_w = float(scene.find('dof_w').get('value'))
+            if scene.find('mb_w') is not None:
+                s.mb_w = float(scene.find('mb_w').get('value'))
+            if scene.find('ss_w') is not None:
+                s.ss_w = float(scene.find('ss_w').get('value'))
+            if scene.find('glossy_w') is not None:
+                s.glossy_w = float(scene.find('glossy_w').get('value'))
+            if scene.find('gi_w') is not None:
+                s.gi_w = float(scene.find('gi_w').get('value'))
+
+            spps = scene.find('spps').get('values').split()
+            spps = [int(i) for i in spps]
+            s.spps = spps
+
+            regions = scene.find('regions')
+            if regions:
+                for region in regions.findall('region'):
+                    regionEntry = ImageRegion()
+                    regionEntry.xmin = int(region.find('xmin').get('value'))
+                    regionEntry.ymin = int(region.find('ymin').get('value'))
+                    regionEntry.xmax = int(region.find('xmax').get('value'))
+                    regionEntry.ymax = int(region.find('ymax').get('value'))
+                    regionEntry.dof_w = float(region.find('dof_w').get('value'))
+                    regionEntry.mb_w = float(region.find('mb_w').get('value'))
+                    regionEntry.ss_w = float(region.find('ss_w').get('value'))
+                    regionEntry.glossy_w = float(region.find('glossy_w').get('value'))
+                    regionEntry.gi_w = float(region.find('gi_w').get('value'))
+                    s.regions.append(regionEntry)
+            r.scenes.append(s)
+            g_scenes[s.id] = s
+            g_scenes_names[s.name] = s
+        g_renderers[r.id] = r
+    global g_scenes_loaded
+    g_scenes_loaded = True
+    return True
+
+
+def save_scenes_file(scenes_ids):
+    if not g_scenes_loaded:
+        print('ERROR: save_scenes_file() -> scenes not loaded')
+        return
+
+    data = {}
+    #for key, scene in g_scenes.items():
+    for key in scenes_ids:
+        scene = g_scenes[key]
+        scene_dict = {'id':scene.id, 'name':scene.name, 'renderer':scene.renderer.name, 'dof_w':scene.dof_w, 'mb_w':scene.mb_w,
+                      'ss_w':scene.ss_w, 'glossy_w':scene.glossy_w, 'gi_w':scene.gi_w}
+        scene_dict['reference'] = os.path.splitext(str(scene.ground_truth))[0] + '.png'
+        scene_dict['thumbnail'] = os.path.splitext(str(scene.ground_truth))[0] + '_thumb256.jpg'
+        spps = [{'spp_id':i, 'spp':spp} for i, spp in enumerate(scene.spps)]
+        regions = [{'id':r.id, 'xmin':r.xmin, 'ymin':r.ymin, 'xmax':r.xmax, 'ymax':r.ymax,
+                    'dof_w':r.dof_w, 'mb_w':r.mb_w, 'ss_w':r.ss_w, 'glossy_w':r.glossy_w, 'gi_w':r.gi_w} for r in scene.regions]
+        scene_dict['spps'] = spps
+        scene_dict['regions'] = regions
+        # data.append(scene_dict)
+        data[scene.id] = scene_dict
+    with open(os.path.join(current_slot_dir, 'scenes.json'), 'w') as ofile:
+        json.dump(data, ofile, indent=4)
+
+
+def load_filters():
+    # load all available denoisers
+    # assumes folder name == filter name == executable name
+    if os.path.isdir(denoisers_dir):
+        filters_names = [name for name in os.listdir(denoisers_dir)
+                        if os.path.isdir(os.path.join(denoisers_dir, name)) and name != 'SampleWriter']
+        for filter_name in filters_names:
+            filter_info = None
+            info_filename = os.path.join(denoisers_dir, filter_name, 'info.json')
+            if not os.path.isfile(info_filename):
+                print('Filter {} missing info.json file.'.format(filter_name))
+                continue
+            with open(os.path.join(denoisers_dir, filter_name, 'info.json')) as info_file:
+                filter_info = json.load(info_file)
+            f = Filter()
+            f.name = filter_name
+            f.full_name = filter_info['full_name']
+            f.comment = filter_info['comment']
+            f.citation = filter_info['citation']
+            if 'versions' in filter_info:
+                for v in filter_info['versions']:
+                    version = FilterVersion()
+                    version.technique = f
+                    version.tag = v['name']
+                    version.message = v['comment']
+                    version.executable = v['executable']
+                    if os.path.isfile(os.path.join(denoisers_dir, filter_name, v['executable'])):
+                        version.status = 'ready'
+                    else:
+                        version.status = 'not compiled'
+                    f.versions.append(version)
+                    g_filters_versions[version.id] = version
+            else:
+                version = FilterVersion()
+                version.technique = f
+                version.tag = 'default'
+                if 'comment' in filter_info and filter_info['comment'] != '':
+                    version.message = filter_info['comment']
+                else:
+                    version.message = 'Default version'
+                version.executable = f.name
+                if os.path.isfile(os.path.join(denoisers_dir, filter_name, filter_name)):
+                    version.status = 'ready'
+                else:
+                    version.status = 'not compiled'
+                f.versions.append(version)
+                g_filters_versions[version.id] = version
+            g_filters[f.id] = f
+            g_filters_names[f.name] = f
+    global g_filters_loaded
+    g_filters_loaded = True
+
+
+def load_samplers():
+    # load all available samplers
+    # assumes folder name == sampler name == executable name
+    if os.path.isdir(samplers_dir):
+        samplers_names = [name for name in os.listdir(samplers_dir)
+                        if os.path.isdir(os.path.join(samplers_dir, name))]
+        for sampler_name in samplers_names:
+            sampler_info = None
+            info_filename = os.path.join(samplers_dir, sampler_name, 'info.json')
+            if not os.path.isfile(info_filename):
+                print('Sampler {} missing info.json file.'.format(sampler_name))
+                continue
+            with open(os.path.join(samplers_dir, sampler_name, 'info.json')) as info_file:
+                sampler_info = json.load(info_file)
+            f = Sampler()
+            f.name = sampler_name
+            f.full_name = sampler_info['full_name']
+            f.comment = sampler_info['comment']
+            f.citation = sampler_info['citation']
+            if 'versions' in sampler_info:
+                for v in sampler_info['versions']:
+                    version = SamplerVersion()
+                    version.technique = f
+                    version.tag = v['name']
+                    version.message = v['comment']
+                    version.executable = v['executable']
+                    if os.path.isfile(os.path.join(samplers_dir, sampler_name, v['executable'])):
+                        version.status = 'ready'
+                    else:
+                        version.status = 'not compiled'
+                    f.versions.append(version)
+                    g_samplers_versions[version.id] = version
+            else:
+                version = SamplerVersion()
+                version.technique = f
+                version.tag = 'default'
+                if 'comment' in sampler_info and sampler_info['comment'] != '':
+                    version.message = sampler_info['comment']
+                else:
+                    version.message = 'Default version'
+                version.executable = f.name
+                if os.path.isfile(os.path.join(samplers_dir, sampler_name, sampler_name)):
+                    version.status = 'ready'
+                else:
+                    version.status = 'not compiled'
+                f.versions.append(version)
+                g_samplers_versions[version.id] = version
+            g_samplers[f.id] = f
+            g_samplers_names[f.name] = f
+    global g_samplers_loaded
+    g_samplers_loaded = True
+
+
+def load_techniques():
+    load_filters()
+    load_samplers()
+
+
+def save_filters_file(scenes_ids, versions_ids):
+    if not g_filters_loaded:
+        print('ERROR: save_filters_file() -> filters not loaded')
+        return
+    if not g_results_loaded:
+        print('ERROR: save_filters_file() -> results not loaded')
+        return
+
+    data = []
+    for key, f in g_filters.items():
+        filter_dict = {
+            'id': f.id,
+            'name': f.name,
+            'full_name': f.full_name,
+            'comment': f.comment,
+            'citation': f.citation
+        }
+        versions = []
+        for version in f.versions:
+            if version.id not in versions_ids:
+                continue
+
+            version_dict = {
+                'id': version.id,
+                'tag': version.tag,
+                'message': version.message,
+                'status': version.status
+            }
+            # skip filters with no results
+            if not version.results:
+                continue
+            results_ids = []
+            for result in version.results:
+                if result.scene.id in scenes_ids:
+                    results_ids.append(result.id)
+            version_dict['results_ids'] = results_ids
+            versions.append(version_dict)
+        # skip filters with no versions
+        if not versions:
+            continue
+        filter_dict['versions'] = versions
+        data.append(filter_dict)
+    with open(os.path.join(current_slot_dir, 'filters.json'), 'w') as ofile:
+        json.dump(data, ofile, indent=4)
+
+
+def save_samplers_file(scenes_ids, versions_ids):
+    if not g_samplers_loaded:
+        print('ERROR: save_samplers_file() -> samplers not loaded')
+        return
+    if not g_samplers_results_loaded:
+        print('ERROR: save_samplers_file() -> results not loaded')
+        return
+
+    data = []
+    for key, f in g_samplers.items():
+        sampler_dict = {
+            'id': f.id,
+            'name': f.name,
+            'full_name': f.full_name,
+            'comment': f.comment,
+            'citation': f.citation
+        }
+        versions = []
+        for version in f.versions:
+            if version.id not in versions_ids:
+                continue
+
+            version_dict = {
+                'id': version.id,
+                'tag': version.tag,
+                'message': version.message,
+                'status': version.status
+            }
+            # skip filters with no results
+            if not version.results:
+                continue
+            results_ids = []
+            for result in version.results:
+                if result.scene.id in scenes_ids:
+                    results_ids.append(result.id)
+            version_dict['results_ids'] = results_ids
+            versions.append(version_dict)
+        # skip samplers with no versions
+        if not versions:
+            continue
+        sampler_dict['versions'] = versions
+        data.append(sampler_dict)
+    with open(os.path.join(current_slot_dir, 'samplers.json'), 'w') as ofile:
+        json.dump(data, ofile, indent=4)
+
+
+def load_results():
+    for filter in list(g_filters.values()):
+        filter_dir = os.path.join(current_slot_dir, 'denoisers', filter.name)
+        if not os.path.isdir(filter_dir):
+            continue
+        for version in filter.versions:
+            version_dir = os.path.join(filter_dir, version.tag)
+            if not os.path.isdir(version_dir):
+                continue
+            for scene in list(g_scenes.values()):
+                version_results_dir = os.path.join(version_dir, scene.name)
+                if not os.path.isdir(version_results_dir):
+                    continue
+                # FIXME: this doesn't load results with spps not in the scene spp list
+                for spp in scene.spps:
+                    result_img_filename = os.path.join(version_results_dir, '{}_0.exr'.format(spp))
+                    if not os.path.isfile(result_img_filename):
+                        continue
+                    errors_log_filename = os.path.join(version_results_dir, '{}_0_errors.json'.format(spp))
+                    if not os.path.isfile(errors_log_filename):
+                        continue
+                    # skip old results
+                    if os.path.getctime(result_img_filename) > os.path.getctime(errors_log_filename):
+                        continue
+
+                    result = Result()
+                    result.filter_version = version
+                    result.scene = scene
+                    result.spp = spp
+                    main_log_filename = os.path.join(version_results_dir, '{}_0_log.json'.format(spp))
+                    with open(main_log_filename) as log_file:
+                        log_data = json.load(log_file)
+                        result.aborted = log_data['aborted']
+                        result.exec_time = log_data['reconstruction_time']['time_ms']
+                        result.rendering_time = log_data['rendering_time']['time_ms']
+                    with open(errors_log_filename) as log_file:
+                        log_data = json.load(log_file)
+                        result.mse = log_data['mse']
+                        result.psnr = log_data['psnr']
+                        result.ssim = log_data['ssim']
+                        if 'rmse' in log_data:
+                            result.rmse = log_data['rmse']
+                    if result.aborted:
+                        continue
+                    # TODO: regions errors
+                    version.results.append(result)
+    global g_results_loaded
+    g_results_loaded = True
+
+
+def load_samplers_results():
+    for sampler in list(g_samplers.values()):
+        sampler_dir = os.path.join(current_slot_dir, 'samplers', sampler.name)
+        if not os.path.isdir(sampler_dir):
+            continue
+        for version in sampler.versions:
+            version_dir = os.path.join(sampler_dir, version.tag)
+            if not os.path.isdir(version_dir):
+                continue
+            for scene in list(g_scenes.values()):
+                version_results_dir = os.path.join(version_dir, scene.name)
+                if not os.path.isdir(version_results_dir):
+                    continue
+                # FIXME: this doesn't load results with spps not in the scene spp list
+                for spp in scene.spps:
+                    result_img_filename = os.path.join(version_results_dir, '{}_0.exr'.format(spp))
+                    if not os.path.isfile(result_img_filename):
+                        continue
+                    errors_log_filename = os.path.join(version_results_dir, '{}_0_errors.json'.format(spp))
+                    if not os.path.isfile(errors_log_filename):
+                        continue
+                    # skip old results
+                    # if os.path.getctime(result_img_filename) > os.path.getctime(errors_log_filename):
+                    #     continue
+
+                    result = SamplerResult()
+                    result.sampler_version = version
+                    result.scene = scene
+                    result.spp = spp
+                    main_log_filename = os.path.join(version_results_dir, '{}_0_log.json'.format(spp))
+                    with open(main_log_filename) as log_file:
+                        log_data = json.load(log_file)
+                        result.aborted = log_data['aborted']
+                        result.exec_time = log_data['reconstruction_time']['time_ms']
+                        result.rendering_time = log_data['rendering_time']['time_ms']
+                    with open(errors_log_filename) as log_file:
+                        log_data = json.load(log_file)
+                        result.mse = log_data['mse']
+                        result.psnr = log_data['psnr']
+                        result.ssim = log_data['ssim']
+                        if 'rmse' in log_data:
+                            result.rmse = log_data['rmse']
+                    if result.aborted:
+                        continue
+                    # TODO: regions errors
+                    version.results.append(result)
+    global g_samplers_results_loaded
+    g_samplers_results_loaded = True
+
+
+# {
+#     'id': {
+#         'scene_id' int,
+#         'spp': int,
+#         'filter_version_id',
+#         'exec_time': float,
+#         'rendering_time': float,
+#         'psnr': float,
+#         'ssim': float,
+#         'mse': float,
+#         'regions': []
+#     }
+#     ...
+# }
+def save_results_file(scenes_ids, versions_ids):
+    data = {}
+    filters = list(g_filters.values())
+    for f in filters:
+        for v in f.versions:
+            if v.id not in versions_ids:
+                continue
+
+            for result in v.results:
+                if result.scene.id not in scenes_ids:
+                    continue
+
+                data[result.id] = {
+                    'scene_id': result.scene.id,
+                    'spp': result.spp,
+                    'filter_version_id': result.filter_version.id,
+                    'exec_time': result.exec_time,
+                    'rendering_time': result.rendering_time,
+                    'mse': result.mse,
+                    'psnr': result.psnr,
+                    'ssim': result.ssim,
+                    'rmse': result.rmse,
+                    'aborted': result.aborted
+                    #TODO: regions
+                }
+    with open(os.path.join(current_slot_dir, 'results.json'), 'w') as ofile:
+        json.dump(data, ofile, indent=4)
+
+
+def save_samplers_results_file(scenes_ids, versions_ids):
+    data = {}
+    samplers = list(g_samplers.values())
+    for f in samplers:
+        for v in f.versions:
+            if v.id not in versions_ids:
+                continue
+
+            for result in v.results:
+                if result.scene.id not in scenes_ids:
+                    continue
+
+                data[result.id] = {
+                    'scene_id': result.scene.id,
+                    'spp': result.spp,
+                    'sampler_version_id': result.sampler_version.id,
+                    'exec_time': result.exec_time,
+                    'rendering_time': result.rendering_time,
+                    'mse': result.mse,
+                    'psnr': result.psnr,
+                    'ssim': result.ssim,
+                    'rmse': result.rmse,
+                    'aborted': result.aborted
+                    #TODO: regions
+                }
+    with open(os.path.join(current_slot_dir, 'samplers_results.json'), 'w') as ofile:
+        json.dump(data, ofile, indent=4)
+
+
+# get a list of ids and load the corresponding scenes
+# if the list is empty, all scenes are loaded
+def scenesFromArgs(arg_scenes):
+    scenes = []
+    if arg_scenes:
+        for sid in arg_scenes:
+            if sid in g_scenes:
+                scenes.append(g_scenes[sid])
+            else:
+                print('Error: no scene with ID = {} found!'.format(sid))
+    else:
+        scenes = list(g_scenes.values())
+    return scenes
+
+
+# get a list of ids and load the corresponding filters
+# if the list is empty, all filters are loaded
+# if arg_filters is None, no filter is loaded
+def filtersFromArgs(arg_filters):
+    filters = []
+    if arg_filters is not None:
+        if arg_filters:
+            for fid in arg_filters:
+                if fid in g_filters_versions:
+                    filters.append(g_filters_versions[fid])
+                else:
+                    print('Error: no filter with ID = {} found!'.format(fid))
+        else:
+            filters = list(g_filters_versions.values())
+    return filters
+
+
+# get a list of ids and load the corresponding samplers
+# if the list is empty, all samplers are loaded
+def samplersFromArgs(arg_samplers):
+    samplers = []
+    if arg_samplers is not None:
+        if arg_samplers:
+            for fid in arg_samplers:
+                if fid in g_samplers_versions:
+                    samplers.append(g_samplers_versions[fid])
+                else:
+                    print('Error: no sampler with ID = {} found!'.format(fid))
+        else:
+            samplers = list(g_samplers_versions.values())
+    return samplers
+
+
+def cmd_update(args):
+    if args.filters is None and args.samplers is None:
+        print("No results updated. Use --filters and/or --samplers.")
+        return
+
+    load_scenes()
+    load_filters()
+    load_samplers()
+    load_results()
+    load_samplers_results()
+
+    scenes_ids = g_scenes.keys()
+    if args.scenes:
+        scenes_ids = args.scenes
+
+    filters_ids = g_filters.keys()
+    if args.filters is not None and args.filters:
+        filters_ids = args.filters
+
+    samplers_ids = g_samplers.keys()
+    if args.samplers is not None and args.samplers:
+        samplers_ids = args.samplers
+
+    save_scenes_file(scenes_ids)
+    save_filters_file(scenes_ids, filters_ids)
+    save_samplers_file(scenes_ids, samplers_ids)
+    save_results_file(scenes_ids, filters_ids)
+    save_samplers_results_file(scenes_ids, samplers_ids)
+
+
+def cmd_filters(args):
+    load_filters()
+    print('{0:<5s}{1:<20s}{2:<10s}'.format('Id', 'Name', 'Status'))
+    print('{0:75s}'.format('-'*75))
+    for id, v in g_filters_versions.items():
+        if v.tag == 'default':
+            print('{0:<5s}{1:<20s}{2:<10s}'.format(str(id), v.technique.name, v.status))
+        else:
+            print('{0:<5s}{1:<20s}{2:<10s}'.format(str(id), v.technique.name + '-{}'.format(v.tag), v.status))
+    print('{0:75s}'.format('-'*75))
+
+
+def cmd_samplers(args):
+    load_samplers()
+    if not g_samplers_versions:
+        print('No samplers found.')
+        return
+
+    print('{0:<5s}{1:<20s}{2:<10s}'.format('Id', 'Name', 'Status'))
+    print('{0:75s}'.format('-'*75))
+    for id, v in g_samplers_versions.items():
+        if v.tag == 'default':
+            print('{0:<5s}{1:<20s}{2:<10s}'.format(str(id), v.technique.name, v.status))
+        else:
+            print('{0:<5s}{1:<20s}{2:<10s}'.format(str(id), v.technique.name + '-{}'.format(v.tag), v.status))
+    print('{0:75s}'.format('-'*75))
+
+
+def cmd_filter_info(args):
+    load_filters()
+    filters = filtersFromArgs(args.filters)
+
+    for f in filters:
+        print('Name:      {}'.format(f.technique.name))
+        print('Full name: {}'.format(f.technique.full_name))
+        print('Comment:   {}'.format(f.technique.comment))
+        print('Citation:  {}'.format(f.technique.citation))
+        print('Versions:')
+        for version in f.technique.versions:
+            print('{}'.format(version.id))
+            print('    Name:    {}'.format(version.tag))
+            print('    Message: {}'.format(version.message))
+
+
+def cmd_sampler_info(args):
+    load_samplers()
+    samplers = samplersFromArgs(args.samplers)
+
+    for f in samplers:
+        print('Name:      {}'.format(f.technique.name))
+        print('Full name: {}'.format(f.technique.full_name))
+        print('Comment:   {}'.format(f.technique.comment))
+        print('Citation:  {}'.format(f.technique.citation))
+        print('Versions:')
+        for version in f.technique.versions:
+            print('{}'.format(version.id))
+            print('    Name:    {}'.format(version.tag))
+            print('    Message: {}'.format(version.message))
+
+
+def cmd_scenes(args):
+    if args.set:
+        if os.path.isdir(args.set):
+            if os.path.islink(scenes_dir):
+                os.unlink(scenes_dir)
+            os.symlink(os.path.abspath(args.set), 'scenes')
+            print('Scenes path set.\n')
+            return
+        else:
+            print('ERROR: \"{}\" is not an existing directory.\n'.format(args.set))
+            return
+
+    if not load_scenes():
+        print('ERROR: Scenes directory not set (see \"--set\" option).\n')
+        return
+
+    print('{0:<5s}{1:<50s}{2:<20s}'.format('Id', 'Name', 'Renderer'))
+    print('{0:75s}'.format('-'*75))
+    for sid, scene in g_scenes.items():
+        print('{0:<5s}{1:<50s}{2:<20s}'.format(str(sid), scene.name, scene.renderer.name))
+    print('{0:75s}'.format('-'*75))
+
+
+def prettify(elem):
+    rough_string = ET.tostring(elem, 'utf-8')
+    reparsed = minidom.parseString(rough_string)
+    return reparsed.toprettyxml(indent='    ')
+
+
+def writeTempConfig(arg_scenes, arg_spps):
+    scenes = scenesFromArgs(arg_scenes)
+    if not scenes:
+        return [], ''
+
+    if arg_spps:
+        arg_spps = list(set(arg_spps))
+        arg_spps.sort()
+
+    root_node = {}
+    renderers_array = []
+    for renderer in g_renderers.values():
+        renderer_scenes = [s for s in scenes if s.renderer is renderer]
+        if renderer_scenes:
+            renderer_node = {}
+            renderer_node['name'] = renderer.name
+            path = os.path.join(renderers_dir, renderer.path)
+            renderer_node['path'] = os.path.abspath(path)
+            scenes_array = []
+            for scene in renderer_scenes:
+                scene_node = {}
+                scene_node['name'] = scene.name
+                path = scenes_dir + scene.path
+                scene_node['path'] = os.path.abspath(path)
+                spps_array = []
+                if arg_spps:
+                    spps_array = [spp for spp in arg_spps]
+                else:
+                    spps_array = [spp for spp in scene.spps]
+                scene_node['spps'] = spps_array
+                scene_info_node = {}
+                scene_info_node['has_dof'] = scene.dof_w > 0
+                scene_info_node['has_motion_blur'] = scene.mb_w > 0
+                scene_info_node['has_area_light'] = scene.ss_w > 0
+                scene_info_node['has_glossy_materials'] = scene.glossy_w > 0
+                scene_info_node['has_gi'] = scene.gi_w > 0
+                scene_node['scene_info'] = scene_info_node
+                scenes_array.append(scene_node)
+
+            renderer_node['scenes'] = scenes_array
+            renderers_array.append(renderer_node)
+
+    root_node['renderers'] = renderers_array
+
+    with open('/tmp/benchmark_config.json', 'w') as outfile:
+        json.dump(root_node, outfile, indent=4)
+    return scenes, '/tmp/benchmark_config.json'
+
+
+def run_filters(args):
+    init()
+    load_scenes()
+    load_filters()
+
+    scenes, config_filename = writeTempConfig(args.scenes, args.spps)
+    if not scenes:
+        print('No scene selected')
+        return False
+
+    filters = filtersFromArgs(args.filters)
+    if not filters:
+        return False
+
+    # clear old shared memory files
+    if os.path.isfile('/dev/shm/SAMPLES_MEMORY'):
+        os.remove('/dev/shm/SAMPLES_MEMORY')
+    if os.path.isfile('/dev/shm/RESULT_MEMORY'):
+        os.remove('/dev/shm/RESULT_MEMORY')
+    if os.path.isfile('/dev/shm/PDF_MEMORY'):
+        os.remove('/dev/shm/PDF_MEMORY')
+
+    benchmark_exec = os.path.join(install_prefix_dir, 'bin/fbksd-benchmark')
+    filter_prefix = denoisers_dir
+
+    for f in filters:
+        print('Benchmarking filter: {}'.format(f.get_name()))
+        out_folder = os.path.join(current_slot_dir, 'denoisers', f.technique.name, f.tag)
+        filter_exec = os.path.join(filter_prefix, f.technique.name, f.executable)
+        benchmark_args = [benchmark_exec, '--config', config_filename, '--filter', filter_exec, '--output', out_folder]
+        if not args.overwrite:
+            benchmark_args.append('--resume')
+        p = Popen(benchmark_args, stdout=PIPE, stderr=STDOUT, universal_newlines=True)
+
+        while p.poll() is None:
+            l = p.stdout.readline()
+            print(l, end='')
+        print(p.stdout.read())
+
+    return True
+
+
+def run_samplers(args):
+    load_scenes()
+    load_samplers()
+
+    scenes, config_filename = writeTempConfig(args.scenes, args.spps)
+    if not scenes:
+        print('No scene selected')
+        return False
+
+    samplers = samplersFromArgs(args.samplers)
+    if not samplers:
+        return False
+
+    # clear old shared memory files
+    if os.path.isfile('/dev/shm/SAMPLES_MEMORY'):
+        os.remove('/dev/shm/SAMPLES_MEMORY')
+    if os.path.isfile('/dev/shm/RESULT_MEMORY'):
+        os.remove('/dev/shm/RESULT_MEMORY')
+    if os.path.isfile('/dev/shm/PDF_MEMORY'):
+        os.remove('/dev/shm/PDF_MEMORY')
+
+    benchmark_exec = os.path.join(install_prefix_dir, 'bin/fbksd-benchmark')
+    sampler_prefix = samplers_dir
+
+    for f in samplers:
+        print('Benchmarking sampler: {}'.format(f.get_name()))
+        out_folder = os.path.join(current_slot_dir, f.technique.name, f.tag)
+        sampler_exec = os.path.join(sampler_prefix, f.technique.name, f.executable)
+        benchmark_args = [benchmark_exec, '--config', config_filename, '--filter', sampler_exec, '--output', out_folder]
+        if not args.overwrite:
+            benchmark_args.append('--resume')
+        p = Popen(benchmark_args, stdout=PIPE, stderr=STDOUT, universal_newlines=True)
+
+        while p.poll() is None:
+            l = p.stdout.readline()
+            print(l, end='')
+        print(p.stdout.read())
+
+    return True
+
+
+def cmd_run(args):
+    if not run_filters(args) or not run_samplers(args):
+        print("Nothing to run.")
+
+
+
+# computes errors for each result image and saves a corresponding log file for each one.
+# overwrite logs that are older then the corresponding result images
+def cmd_results_compute(args):
+    load_scenes()
+    load_filters()
+    load_samplers()
+    load_results()
+    load_samplers_results()
+
+    # load filters
+    filters = filtersFromArgs(args.filters)
+    samplers = samplersFromArgs(args.samplers)
+    if not filters and not samplers:
+        print('No technique.')
+        return
+
+    # load scenes
+    scenes = scenesFromArgs(args.scenes)
+    if not scenes:
+        print('No scenes.')
+
+    compare_exec = os.path.join(install_prefix_dir, 'bin/fbksd-compare')
+    exr2png_exec = os.path.join(install_prefix_dir, 'bin/fbksd-exr2png')
+
+    if filters:
+        print('Computing filters results.')
+    for f in filters:
+        for s in scenes:
+            img1 = os.path.join(scenes_dir, s.ground_truth)
+            if not os.path.isfile(img1):
+                print('Error: ground truth {} for scene {} not found.'.format(img1, s.name))
+                continue
+
+            for spp in s.spps:
+                img2 = os.path.join(current_slot_dir, '{}/{}/{}/{}_0.exr'.format(f.technique.name, f.tag, s.name, spp))
+                if not os.path.isfile(img2):
+                    continue
+
+                # skip results already computed
+                errorsLogFilename = os.path.join(current_slot_dir, '{}/{}/{}/{}_0_errors.json'.format(f.technique.name, f.tag, s.name, spp))
+                if not args.overwrite:
+                    if os.path.isfile(errorsLogFilename):
+                        if os.path.getctime(errorsLogFilename) > os.path.getctime(img2) and os.path.getctime(errorsLogFilename) > os.path.getctime(img1):
+                            # print('Prev. result: {}, {}, {} spp'.format(f.get_name(), s.name, str(spp)))
+                            continue
+
+                call([exr2png_exec, img2])
+
+                # compare the full result with the ground truth end parse errors
+                p = Popen([compare_exec, '--save-maps', '--save-errors', img1, img2], stdout=PIPE, stdin=PIPE, stderr=PIPE)
+                # outs, errs = p.communicate('')
+                p.wait()
+                # copy maps and errors log to results folder
+                shutil.move('errors.json', errorsLogFilename)
+                shutil.move('mse_map.png', os.path.join(current_slot_dir, '{}/{}/{}/{}_0_mse_map.png'.format(f.technique.name, f.tag, s.name, spp)))
+                shutil.move('rmse_map.png', os.path.join(current_slot_dir, '{}/{}/{}/{}_0_rmse_map.png'.format(f.technique.name, f.tag, s.name, spp)))
+                shutil.move('ssim_map.png', os.path.join(current_slot_dir, '{}/{}/{}/{}_0_ssim_map.png'.format(f.technique.name, f.tag, s.name, spp)))
+
+                # compare regions
+                # for imgRegion in s.regions:
+                #     regionError = RegionError(region_id=imgRegion.id)
+                #     p = Popen([compare_exec, img1, img2, '--xmin', str(imgRegion.xmin), '--ymin', str(imgRegion.ymin), '--xmax', str(imgRegion.xmax), '--ymax', str(imgRegion.ymax)], stdout=PIPE, stdin=PIPE, stderr=PIPE)
+                #     outs, errs = p.communicate('')
+                #     p.wait()
+                #     errs = outs.split(b'\n')
+                #     regionError.mse = float(errs[0].split(b' = ')[1])
+                #     regionError.psnr = float(errs[1].split(b' = ')[1])
+                #     regionError.ssim = float(errs[2].split(b' = ')[1])
+                #     result.regions.append(regionError)
+                #     session.add(regionError)
+
+                print('{}, {}, {} spp'.format(f.get_name(), s.name, str(spp)))
+
+    if samplers:
+        print('\nComputing samplers results.')
+    for f in samplers:
+        for s in scenes:
+            img1 = os.path.join(scenes_dir, s.ground_truth)
+            if not os.path.isfile(img1):
+                print('Error: ground truth {} for scene {} not found.'.format(img1, s.name))
+                continue
+
+            for spp in s.spps:
+                img2 = os.path.join(current_slot_dir, '{}/{}/{}/{}_0.exr'.format(f.technique.name, f.tag, s.name, spp))
+                if not os.path.isfile(img2):
+                    continue
+
+                # skip results already computed
+                errorsLogFilename = os.path.join(current_slot_dir, '{}/{}/{}/{}_0_errors.json'.format(f.technique.name, f.tag, s.name, spp))
+                if not args.overwrite:
+                    if os.path.isfile(errorsLogFilename):
+                        if os.path.getctime(errorsLogFilename) > os.path.getctime(img2) and os.path.getctime(errorsLogFilename) > os.path.getctime(img1):
+                            continue
+
+                call([exr2png_exec, img2])
+
+                # compare the full result with the ground truth end parse errors
+                p = Popen([compare_exec, '--save-maps', '--save-errors', img1, img2], stdout=PIPE, stdin=PIPE, stderr=PIPE)
+                p.wait()
+                # copy maps and errors log to results folder
+                shutil.move('errors.json', errorsLogFilename)
+                shutil.move('mse_map.png', os.path.join(current_slot_dir, '{}/{}/{}/{}_0_mse_map.png'.format(f.technique.name, f.tag, s.name, spp)))
+                shutil.move('rmse_map.png', os.path.join(current_slot_dir, '{}/{}/{}/{}_0_rmse_map.png'.format(f.technique.name, f.tag, s.name, spp)))
+                shutil.move('ssim_map.png', os.path.join(current_slot_dir, '{}/{}/{}/{}_0_ssim_map.png'.format(f.technique.name, f.tag, s.name, spp)))
+                print('{}, {}, {} spp'.format(f.get_name(), s.name, str(spp)))
+
+
+def print_table(table_title, rows_title, cols_title, rows_labels, cols_labels, data, row_size=20, col_size=8):
+    row_label_size = row_size
+    col_label_size = col_size
+    header_size = row_label_size + (col_label_size*len(cols_labels)) + len(cols_labels)
+
+    # table title
+    print('═'*header_size)
+    print('{:^{header_size}s}'.format(table_title, header_size=header_size))
+    print('═'*header_size)
+
+    if cols_title != '' and rows_title != '':
+        # rows title
+        print('{0:^{col_width}s}│'.format(rows_title, col_width=row_label_size), end='')
+        # cols title
+        print('{0:^{col_width}s}│'.format(cols_title, col_width=len(cols_labels)*col_label_size + len(cols_labels) - 1))
+
+    print(' '*row_label_size + '│' + ('{:^{col_size}}│'*len(cols_labels)).format(*cols_labels, col_size=col_label_size))
+    # print('─'*header_size)
+    for row_i, row in enumerate(data):
+        print('{:<{row_label_size}.{row_label_size}s}│'.format(rows_labels[row_i], row_label_size=row_label_size), end='')
+        for value in row:
+            if value:
+                print('{0:={col_size}.2f}│'.format(value, col_size=col_label_size), end='')
+            else:
+                print('{0:^{col_size}.2s}│'.format('', col_size=col_label_size), end='')
+        print()
+    print('═'*header_size)
+
+
+def cmd_results_show(args):
+    load_scenes()
+    load_filters()
+    load_results()
+    filters = filtersFromArgs(args.filters)
+    if not filters:
+        return
+
+    metrics = []
+    if args.mse:
+        metrics.append('mse')
+    if args.psnr:
+        metrics.append('psnr')
+    if args.ssim:
+        metrics.append('ssim')
+    if not metrics:
+        metrics = ['mse', 'psnr', 'ssim']
+
+    filters_names = [f.get_name() for f in filters]
+    for scene in list(g_scenes.values()):
+        for metric in metrics:
+            data = [[None for y in scene.spps] for x in filters]
+            spps_names = [str(spp) for spp in scene.spps]
+            table_has_results = False
+            for row_i, v in enumerate(filters):
+                for col_i, spp in enumerate(scene.spps):
+                    result = v.get_result(scene, spp)
+                    if result:
+                        data[row_i][col_i] = getattr(result, metric)
+                        table_has_results = True
+            if table_has_results:
+                print_table(scene.name, ' ', metric, filters_names, spps_names, data)
+
+
+def cmd_results_rank(args):
+    load_scenes()
+    load_filters()
+    load_results()
+    filters = filtersFromArgs(args.filters)
+    if not filters:
+        return
+
+    scenes = scenesFromArgs(args.scenes)
+    if not scenes:
+        return
+
+    metrics = []
+    if args.mse:
+        metrics.append('mse')
+    if args.psnr:
+        metrics.append('psnr')
+    if args.ssim:
+        metrics.append('ssim')
+    if not metrics:
+        metrics = ['mse', 'psnr', 'ssim']
+
+    filters_names = [f.get_name() for f in filters]
+    for metric in metrics:
+        data = [[None for y in filters] for x in scenes]
+        scenes_names = [s.name for s in scenes]
+        table_has_results = False
+        for row_i, s in enumerate(scenes):
+            for col_i, v in enumerate(filters):
+                mean_error = 0.0
+                n_errors = 0
+                for spp in s.spps:
+                    result = v.get_result(s, spp)
+                    if result:
+                        mean_error += getattr(result, metric)
+                        n_errors += 1
+                if n_errors > 0:
+                    mean_error /= n_errors
+                data[row_i][col_i] = mean_error
+                table_has_results = True
+
+        all_scenes_mean = [0.0 for y in filters]
+        non_null_count = [0 for y in filters]
+        for row_i, s in enumerate(scenes):
+            for col_i, v in enumerate(filters):
+                error = data[row_i][col_i]
+                if error:
+                    all_scenes_mean[col_i] += error
+                    non_null_count[col_i] += 1
+        for col_i, v in enumerate(filters):
+            if non_null_count[col_i]:
+                all_scenes_mean[col_i] /= non_null_count[col_i]
+
+        if table_has_results:
+            print_table(metric, ' ', 'Filters', scenes_names, filters_names, data, 30, 20)
+            print_table(metric, ' ', 'Filters', ['All scenes error mean'], filters_names, [all_scenes_mean], 30, 20)
+
+
+def print_table_csv(data):
+    for row in data:
+        for value in row:
+            if value:
+                print('{:.4f},'.format(value), end='')
+            else:
+                print('{:.4f},'.format(0.0), end='')
+        print()
+
+
+def cmd_results_export_csv(args):
+    load_scenes()
+    load_filters()
+    load_results()
+    filters = filtersFromArgs(args.filters)
+    if not filters:
+        return
+
+    scenes = scenesFromArgs(args.scenes)
+    if not scenes:
+        return
+
+    metrics = ['mse', 'psnr', 'ssim']
+    if args.metrics:
+        metrics = args.metrics
+
+    mse_scale = 1.0
+    if args.mse_scale:
+        mse_scale = args.mse_scale
+
+    rmse_scale = 1.0
+    if args.rmse_scale:
+        rmse_scale = args.rmse_scale
+
+    data = []
+    row_i = 0
+    for scene in scenes:
+        spps = []
+        if args.spps:
+            spps = args.spps
+        else:
+            spps = scene.spps
+        for spp in spps:
+            data.append([None for y in itertools.product(filters, metrics)])
+            col_i = 0
+            for f in filters:
+                result = f.get_result(scene, spp)
+                for metric in metrics:
+                    if result:
+                        if metric == 'mse':
+                            data[row_i][col_i] = getattr(result, metric) * mse_scale
+                        elif metric == 'rmse':
+                            data[row_i][col_i] = getattr(result, metric) * rmse_scale
+                        else:
+                            data[row_i][col_i] = getattr(result, metric)
+                    col_i += 1
+            row_i += 1
+    print_table_csv(data)
+
+
+def cmd_export_page(args):
+    if os.path.isdir(args.dest):
+        if args.overwrite:
+            print('Overwriting existing destination.')
+            shutil.rmtree(args.dest)
+        else:
+            print('Destination already exists.')
+            return
+
+    # copy results
+    results_dest = os.path.join(args.dest, 'Results')
+    shutil.copytree(current_slot_dir, results_dest, ignore=shutil.ignore_patterns('*.exr', '*.json'))
+    shutil.copyfile(os.path.join(current_slot_dir, 'results.json'), os.path.join(args.dest, 'results.json'))
+    shutil.copyfile(os.path.join(current_slot_dir, 'scenes.json'), os.path.join(args.dest, 'scenes.json'))
+    shutil.copyfile(os.path.join(current_slot_dir, 'filters.json'), os.path.join(args.dest, 'filters.json'))
+    # copy references
+    references_dest = os.path.join(args.dest, 'references')
+    shutil.copytree(os.path.join(scenes_dir, 'references'), references_dest,
+                    ignore=shutil.ignore_patterns('*.exr', '*.log', '*.txt', '*.py', 'bad_imgs', 'partials', 'bad_partials'))
+
+
+
+def get_slots():
+    slots = []
+    current_slot = ''
+    for name in os.listdir(results_dir):
+        path = os.path.join(results_dir, name)
+        if os.path.isdir(path):
+            if os.path.islink(path):
+                current_slot = os.path.basename(os.readlink(path))
+            else:
+                slots.append(
+                    {'name': name,
+                     'ctime': os.path.getctime(path)}
+                )
+    slots.sort(key=lambda x: x['ctime'], reverse=False)
+    return slots, current_slot
+
+
+def cmd_slots(args):
+    init()
+    slots, current_slot = get_slots()
+    print('{0}{1:<4s}{2:<16}{3:<20s}'.format(' ', 'Id', 'Creation Date', 'Name'))
+    print('{0:75s}'.format('-'*75))
+    for i, slot in enumerate(slots):
+        pretty_ctime = time.strftime('%d/%m/%Y', time.gmtime(slot['ctime']))
+        name = os.path.basename(slot['name'])
+        if current_slot == slot['name']:
+            print('* {0:<4s}{1:<16}{2:<20s}'.format(str(i+1), pretty_ctime, name))
+        else:
+            print('  {0:<4s}{1:<16}{2:<20s}'.format(str(i+1), pretty_ctime, name))
+    print('{0:75s}'.format('-'*75))
+
+
+def cmd_slots_new(args):
+    new_path = os.path.join(results_dir, args.name)
+    if os.path.exists(new_path):
+        print('ERROR: Slot {} already exists.'.format(args.name))
+        return
+
+    if not os.path.islink(current_slot_dir):
+        print('ERROR: {} is not a symlink.'.format(current_slot_dir))
+        return
+
+    os.mkdir(new_path)
+    os.unlink(current_slot_dir)
+    os.symlink(args.name, current_slot_dir)
+
+
+def cmd_slots_select(args):
+    slots, current_slot = get_slots()
+    if args.id < 1 or args.id > len(slots):
+        print('ERROR: Invalid ID.')
+        return
+
+    if os.path.isdir(current_slot_dir):
+        if not os.path.islink(current_slot_dir):
+            print('ERROR: {} is not a symlink.'.format(current_slot_dir))
+            return
+        os.unlink(current_slot_dir)
+    os.symlink(slots[args.id - 1]['name'], current_slot_dir)
+
+
+def cmd_serve(args):
+    stdout = sys.stderr
+    if not os.path.isdir(page_dir):
+        shutil.copytree(os.path.join(install_prefix_dir, 'share/fbksd/page'), page_dir, symlinks=True)
+
+    try:
+        os.chdir(page_dir)
+        Handler = http.server.SimpleHTTPRequestHandler
+        httpd = socketserver.TCPServer(('', 8000), Handler)
+        print('serving at port 8000. Press Ctrl-C to finish.')
+        f = open(os.devnull, 'w')
+        sys.stderr = f
+        httpd.serve_forever()
+    except KeyboardInterrupt:
+        sys.stderr = stdout
+        print('\b\bfinished.')
+
+
+
+class ManHelpFormater(argparse.RawDescriptionHelpFormatter):
+    def _fill_text(self, text, width, indent):
+        title = 'description:\n'
+        indent = '  '
+        return title + ''.join(indent + line for line in text.splitlines(keepends=True))
+
+
+
+#=============================================
+#                    Main                    #
+#=============================================
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(prog='fbksd', description='fbksd system cli interface.')
+    subparsers = parser.add_subparsers(title='subcommands', description='\n  Test description')
+
+    # update
+    parserUpdate = subparsers.add_parser('update', help='update data shown on the results page.')
+    parserUpdate.add_argument('--filters', nargs='*', type=int, metavar='FILTER_ID', help='filters ids (default: all)')
+    parserUpdate.add_argument('--samplers', nargs='*', type=int, metavar='SAMPLER_ID', help='samplers ids (default: all)')
+    parserUpdate.add_argument('--scenes', nargs='+', type=int, metavar='SCENE_ID', help='scenes ids (default: all)')
+    parserUpdate.set_defaults(func=cmd_update)
+
+    # filters
+    parserFilters = subparsers.add_parser('filters', formatter_class=ManHelpFormater,
+        help='list all filters', description='List all filters')
+    parserFilters.set_defaults(func=cmd_filters)
+
+    # samplers
+    parserSamplers = subparsers.add_parser('samplers', help='list all samplers')
+    parserSamplers.set_defaults(func=cmd_samplers)
+
+    # scenes
+    parserScenes = subparsers.add_parser('scenes', help='list all scenes')
+    parserScenes.add_argument('--set', metavar='SCENES_DIR', help='Sets the scenes directory.')
+    parserScenes.set_defaults(func=cmd_scenes)
+
+    # filter-info, sampler-info
+    parserFilterInfo = subparsers.add_parser('filter-info', help='shows details about a filter')
+    parserFilterInfo.add_argument('filters', metavar='FILTER_ID', type=int, nargs='+', help='Filter ID.')
+    parserFilterInfo.set_defaults(func=cmd_filter_info)
+    parserSamplerInfo = subparsers.add_parser('sampler-info', help='shows details about a sampler')
+    parserSamplerInfo.add_argument('samplers', metavar='SAMPLER_ID', type=int, nargs='+', help='Sampler ID')
+    parserSamplerInfo.set_defaults(func=cmd_sampler_info)
+
+    # run
+    parserRun = subparsers.add_parser('run', formatter_class=ManHelpFormater,
+        description=
+            'Run the benchmark for selected filters and samplers.\n'
+            'To run filters, use the \"--filters\" option passing the ids of the desired filters.\n'
+            'If no id is passed, all filters are selected by default.\n'
+            'If the \"--filters\" option is not used, no filter is executed.\n'
+            'The same behaviour is valid for the \"--samplers\" option.\n\n'
+            'To specify the scenes, use the \"--scenes\" option passing the ids of the desired scenes.\n'
+            'If this option is not used, or if no id is given, all scenes are selected.\n')
+    parserRun.set_defaults(func=cmd_run)
+    parserRun.add_argument('--overwrite', action='store_true', dest='overwrite', help='overwrite previous results.')
+    parserRun.add_argument('--filters', metavar='FILTER_ID', type=int, dest='filters', nargs='*', help='list of filters IDs (all by default)')
+    parserRun.add_argument('--samplers', metavar='SAMPLER_ID', type=int, dest='samplers', nargs='*', help='list of samplers IDs (all by default)')
+    parserRun.add_argument('--scenes', metavar='SCENE_ID', type=int, dest='scenes', nargs='+', help='list of scenes IDs')
+    parserRun.add_argument('--spps', metavar='SPP', type=int, dest='spps', nargs='+', help='list of spps to use (overwrite the ones defines in the profile)')
+
+    # results
+    parserResults = subparsers.add_parser('results', help='manipulate results')
+    resultsSubparsers = parserResults.add_subparsers(title='results subcommands')
+    # results compute
+    parserResultsCompute = resultsSubparsers.add_parser('compute', help='compute errors for the results saved in the results folder')
+    parserResultsCompute.add_argument('--filters', nargs='*', type=int, metavar='FILTER_ID', help='filters ids (default: all)')
+    parserResultsCompute.add_argument('--samplers', nargs='*', type=int, metavar='SAMPLER_ID', help='samplers ids (default: all)')
+    parserResultsCompute.add_argument('--scenes', nargs='+', type=int, metavar='SCENE_ID', help='scenes ids (default: all)')
+    parserResultsCompute.add_argument('--overwrite', action='store_true', dest='overwrite', help='overwrite previous results.')
+    parserResultsCompute.set_defaults(func=cmd_results_compute)
+    # results show
+    parserResultsShow = resultsSubparsers.add_parser('show', help='list results')
+    parserResultsShow.add_argument('filters', nargs='*', type=int, help='filters ids.')
+    parserResultsShow.add_argument('samplers', nargs='*', type=int, help='samplers ids.')
+    parserResultsShow.add_argument('--ssim', action='store_true', help='Shows ssim error.')
+    parserResultsShow.add_argument('--mse', action='store_true', help='Shows mse error.')
+    parserResultsShow.add_argument('--psnr', action='store_true', help='Shows psnr error.')
+    parserResultsShow.set_defaults(func=cmd_results_show)
+    # results rank
+    parserResultsRank = resultsSubparsers.add_parser('rank', help='show a table ranking the filters')
+    parserResultsRank.add_argument('--filters', nargs='+', type=int, metavar='FILTER_ID', help='filters ids (default: all)')
+    parserResultsRank.add_argument('--samplers', nargs='+', type=int, metavar='SAMPLER_ID', help='samplers ids (default: all)')
+    parserResultsRank.add_argument('--scenes', nargs='+', type=int, metavar='SCENE_ID', help='scenes ids (default: all)')
+    parserResultsRank.add_argument('--ssim', action='store_true', help='Shows ssim error.')
+    parserResultsRank.add_argument('--mse', action='store_true', help='Shows mse error.')
+    parserResultsRank.add_argument('--psnr', action='store_true', help='Shows psnr error.')
+    parserResultsRank.set_defaults(func=cmd_results_rank)
+    # result export-csv
+    parserResultsExportCSV = resultsSubparsers.add_parser('export-csv', help='Prints a CSV table with the errors')
+    parserResultsExportCSV.add_argument('--filters', nargs='+', type=int, metavar='FILTER_ID', help='filters ids (default: all)')
+    parserResultsExportCSV.add_argument('--samplers', nargs='+', type=int, metavar='SAMPLER_ID', help='samplers ids (default: all)')
+    parserResultsExportCSV.add_argument('--scenes', nargs='+', type=int, metavar='SCENE_ID', help='scenes ids (default: all)')
+    parserResultsExportCSV.add_argument('--spps', metavar='SPP', type=int, dest='spps', nargs='+', help='list of spps to use (overwrite the ones defines in the profile)')
+    parserResultsExportCSV.add_argument('--mse-scale', type=float, dest='mse_scale', help='Scale applyed to the mse values')
+    parserResultsExportCSV.add_argument('--rmse-scale', type=float, dest='rmse_scale', help='Scale applyed to the rmse values')
+    parserResultsExportCSV.add_argument('--metrics', nargs='+', metavar='METRIC', help='List of metrics to export. Is this option is not used, all metrics are exported. Supported metrics are: mse, psnr, rmse, ssim')
+    parserResultsExportCSV.set_defaults(func=cmd_results_export_csv)
+    # results export
+    parserResultsExport = resultsSubparsers.add_parser(
+        'export',
+        help='Export results and reference images. This is usefull to view results in a different results page.'
+    )
+    parserResultsExport.add_argument('dest', metavar='DEST', help='Destination folder.')
+    parserResultsExport.add_argument('--overwrite', action='store_true', help='Overwrites DEST if it already exists.')
+    parserResultsExport.set_defaults(func=cmd_export_page)
+
+    # slots
+    parserSlots = subparsers.add_parser('slots', help='manage result slots')
+    parserSlots.set_defaults(func=cmd_slots)
+    slotsSubparsers = parserSlots.add_subparsers(title='slots subcommands')
+    # slots new
+    parserSlotsNew = slotsSubparsers.add_parser('new', help='Create (and select) a new slot.')
+    parserSlotsNew.add_argument('name', metavar='NAME', help='new slot name')
+    parserSlotsNew.set_defaults(func=cmd_slots_new)
+    # slots select
+    parserSlotsSelect = slotsSubparsers.add_parser('select', help='Select another slot.')
+    parserSlotsSelect.add_argument('id', type=int, metavar='SLOT_ID', help='Id of the desired slot')
+    parserSlotsSelect.set_defaults(func=cmd_slots_select)
+
+    # serve
+    parserServe = subparsers.add_parser('serve', help='Serve the results page on port 8000 (use Ctrl-C to exit).')
+    parserServe.set_defaults(func=cmd_serve)
+
+    args = parser.parse_args()
+    if hasattr(args, 'func'):
+        args.func(args)
+    else:
+        parser.print_help()
