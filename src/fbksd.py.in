@@ -6,6 +6,7 @@ import sys
 import shutil
 import xml.etree.ElementTree as ET
 from xml.dom import minidom
+import subprocess
 from subprocess import call, Popen, PIPE, STDOUT
 import json
 import uuid
@@ -23,7 +24,7 @@ scenes_dir         = os.path.join(os.getcwd(), 'scenes')
 renderers_dir      = os.path.join(os.getcwd(), 'renderers')
 denoisers_dir      = os.path.join(os.getcwd(), 'denoisers')
 samplers_dir       = os.path.join(os.getcwd(), 'samplers')
-page_dir           = os.path.join(os.getcwd(), 'page')
+page_dir           = os.path.join(os.getcwd(), '.page')
 results_dir        = os.path.join(os.getcwd(), 'results')
 current_slot_dir   = os.path.join(results_dir, '.current')
 scenes_profile     = os.path.join(scenes_dir, 'scenes.xml')
@@ -238,16 +239,6 @@ g_samplers_results_loaded = False
 #=============================================
 #               Procedures                   #
 #=============================================
-
-def init():
-    # results_dir = 'results/'
-    # current_slot_dir = results_dir + '.current'
-    if not os.path.isdir(results_dir):
-        new_slot_name = 'Results 1'
-        new_slot_path = os.path.join(results_dir, new_slot_name)
-        os.makedirs(new_slot_path)
-        os.symlink(new_slot_name, os.path.join(results_dir, '.current'))
-
 
 # Loads the scenes from the scenes_profile file
 def load_scenes():
@@ -753,6 +744,34 @@ def samplersFromArgs(arg_samplers):
     return samplers
 
 
+def cmd_init(args):
+    if not os.path.isdir(renderers_dir):
+        os.mkdir(renderers_dir)
+
+    if not os.path.isdir(denoisers_dir):
+        os.mkdir(denoisers_dir)
+
+    if not os.path.isdir(samplers_dir):
+        os.mkdir(samplers_dir)
+
+    if not os.path.isdir(results_dir):
+        new_slot_name = 'Results 1'
+        if args.slot_name:
+            new_slot_name = args.slot_name
+        new_slot_path = os.path.join(results_dir, new_slot_name)
+        os.makedirs(new_slot_path)
+        os.symlink(new_slot_name, os.path.join(results_dir, '.current'))
+
+    if not os.path.isdir(scenes_dir):
+        if args.scenes_dir:
+            if os.path.isdir(args.scenes_dir):
+                os.symlink(os.path.abspath(args.scenes_dir), 'scenes')
+            else:
+                print('ERROR: \"{}\" is not an existing directory.\n'.format(args.scenes_dir))
+        else:
+            os.mkdir(scenes_dir)
+
+
 def cmd_update(args):
     if args.filters is None and args.samplers is None:
         print("No results updated. Use --filters and/or --samplers.")
@@ -894,7 +913,7 @@ def writeTempConfig(arg_scenes, arg_spps):
             for scene in renderer_scenes:
                 scene_node = {}
                 scene_node['name'] = scene.name
-                path = scenes_dir + scene.path
+                path = os.path.join(scenes_dir, scene.path)
                 scene_node['path'] = os.path.abspath(path)
                 spps_array = []
                 if arg_spps:
@@ -922,7 +941,6 @@ def writeTempConfig(arg_scenes, arg_spps):
 
 
 def run_filters(args):
-    init()
     load_scenes()
     load_filters()
 
@@ -1036,85 +1054,87 @@ def cmd_results_compute(args):
 
     if filters:
         print('Computing filters results.')
-    for f in filters:
-        for s in scenes:
-            img1 = os.path.join(scenes_dir, s.ground_truth)
-            if not os.path.isfile(img1):
-                print('Error: ground truth {} for scene {} not found.'.format(img1, s.name))
-                continue
-
-            for spp in s.spps:
-                img2 = os.path.join(current_slot_dir, '{}/{}/{}/{}_0.exr'.format(f.technique.name, f.tag, s.name, spp))
-                if not os.path.isfile(img2):
+        denoisers_prefix = os.path.join(current_slot_dir, 'denoisers')
+        for f in filters:
+            for s in scenes:
+                img1 = os.path.join(scenes_dir, s.ground_truth)
+                if not os.path.isfile(img1):
+                    print('Error: ground truth {} for scene {} not found.'.format(img1, s.name))
                     continue
 
-                # skip results already computed
-                errorsLogFilename = os.path.join(current_slot_dir, '{}/{}/{}/{}_0_errors.json'.format(f.technique.name, f.tag, s.name, spp))
-                if not args.overwrite:
-                    if os.path.isfile(errorsLogFilename):
-                        if os.path.getctime(errorsLogFilename) > os.path.getctime(img2) and os.path.getctime(errorsLogFilename) > os.path.getctime(img1):
-                            # print('Prev. result: {}, {}, {} spp'.format(f.get_name(), s.name, str(spp)))
-                            continue
+                for spp in s.spps:
+                    img2 = os.path.join(denoisers_prefix, '{}/{}/{}/{}_0.exr'.format(f.technique.name, f.tag, s.name, spp))
+                    if not os.path.isfile(img2):
+                        continue
 
-                call([exr2png_exec, img2])
+                    # skip results already computed
+                    errorsLogFilename = os.path.join(denoisers_prefix, '{}/{}/{}/{}_0_errors.json'.format(f.technique.name, f.tag, s.name, spp))
+                    if not args.overwrite:
+                        if os.path.isfile(errorsLogFilename):
+                            if os.path.getctime(errorsLogFilename) > os.path.getctime(img2) and os.path.getctime(errorsLogFilename) > os.path.getctime(img1):
+                                # print('Prev. result: {}, {}, {} spp'.format(f.get_name(), s.name, str(spp)))
+                                continue
 
-                # compare the full result with the ground truth end parse errors
-                p = Popen([compare_exec, '--save-maps', '--save-errors', img1, img2], stdout=PIPE, stdin=PIPE, stderr=PIPE)
-                # outs, errs = p.communicate('')
-                p.wait()
-                # copy maps and errors log to results folder
-                shutil.move('errors.json', errorsLogFilename)
-                shutil.move('mse_map.png', os.path.join(current_slot_dir, '{}/{}/{}/{}_0_mse_map.png'.format(f.technique.name, f.tag, s.name, spp)))
-                shutil.move('rmse_map.png', os.path.join(current_slot_dir, '{}/{}/{}/{}_0_rmse_map.png'.format(f.technique.name, f.tag, s.name, spp)))
-                shutil.move('ssim_map.png', os.path.join(current_slot_dir, '{}/{}/{}/{}_0_ssim_map.png'.format(f.technique.name, f.tag, s.name, spp)))
+                    call([exr2png_exec, img2])
 
-                # compare regions
-                # for imgRegion in s.regions:
-                #     regionError = RegionError(region_id=imgRegion.id)
-                #     p = Popen([compare_exec, img1, img2, '--xmin', str(imgRegion.xmin), '--ymin', str(imgRegion.ymin), '--xmax', str(imgRegion.xmax), '--ymax', str(imgRegion.ymax)], stdout=PIPE, stdin=PIPE, stderr=PIPE)
-                #     outs, errs = p.communicate('')
-                #     p.wait()
-                #     errs = outs.split(b'\n')
-                #     regionError.mse = float(errs[0].split(b' = ')[1])
-                #     regionError.psnr = float(errs[1].split(b' = ')[1])
-                #     regionError.ssim = float(errs[2].split(b' = ')[1])
-                #     result.regions.append(regionError)
-                #     session.add(regionError)
+                    # compare the full result with the ground truth end parse errors
+                    p = Popen([compare_exec, '--save-maps', '--save-errors', img1, img2], stdout=PIPE, stdin=PIPE, stderr=PIPE)
+                    # outs, errs = p.communicate('')
+                    p.wait()
+                    # copy maps and errors log to results folder
+                    shutil.move('errors.json', errorsLogFilename)
+                    shutil.move('mse_map.png', os.path.join(denoisers_prefix, '{}/{}/{}/{}_0_mse_map.png'.format(f.technique.name, f.tag, s.name, spp)))
+                    shutil.move('rmse_map.png', os.path.join(denoisers_prefix, '{}/{}/{}/{}_0_rmse_map.png'.format(f.technique.name, f.tag, s.name, spp)))
+                    shutil.move('ssim_map.png', os.path.join(denoisers_prefix, '{}/{}/{}/{}_0_ssim_map.png'.format(f.technique.name, f.tag, s.name, spp)))
 
-                print('{}, {}, {} spp'.format(f.get_name(), s.name, str(spp)))
+                    # compare regions
+                    # for imgRegion in s.regions:
+                    #     regionError = RegionError(region_id=imgRegion.id)
+                    #     p = Popen([compare_exec, img1, img2, '--xmin', str(imgRegion.xmin), '--ymin', str(imgRegion.ymin), '--xmax', str(imgRegion.xmax), '--ymax', str(imgRegion.ymax)], stdout=PIPE, stdin=PIPE, stderr=PIPE)
+                    #     outs, errs = p.communicate('')
+                    #     p.wait()
+                    #     errs = outs.split(b'\n')
+                    #     regionError.mse = float(errs[0].split(b' = ')[1])
+                    #     regionError.psnr = float(errs[1].split(b' = ')[1])
+                    #     regionError.ssim = float(errs[2].split(b' = ')[1])
+                    #     result.regions.append(regionError)
+                    #     session.add(regionError)
+
+                    print('{}, {}, {} spp'.format(f.get_name(), s.name, str(spp)))
 
     if samplers:
         print('\nComputing samplers results.')
-    for f in samplers:
-        for s in scenes:
-            img1 = os.path.join(scenes_dir, s.ground_truth)
-            if not os.path.isfile(img1):
-                print('Error: ground truth {} for scene {} not found.'.format(img1, s.name))
-                continue
-
-            for spp in s.spps:
-                img2 = os.path.join(current_slot_dir, '{}/{}/{}/{}_0.exr'.format(f.technique.name, f.tag, s.name, spp))
-                if not os.path.isfile(img2):
+        samplers_prefix = os.path.join(current_slot_dir, 'samplers')
+        for f in samplers:
+            for s in scenes:
+                img1 = os.path.join(scenes_dir, s.ground_truth)
+                if not os.path.isfile(img1):
+                    print('Error: ground truth {} for scene {} not found.'.format(img1, s.name))
                     continue
 
-                # skip results already computed
-                errorsLogFilename = os.path.join(current_slot_dir, '{}/{}/{}/{}_0_errors.json'.format(f.technique.name, f.tag, s.name, spp))
-                if not args.overwrite:
-                    if os.path.isfile(errorsLogFilename):
-                        if os.path.getctime(errorsLogFilename) > os.path.getctime(img2) and os.path.getctime(errorsLogFilename) > os.path.getctime(img1):
-                            continue
+                for spp in s.spps:
+                    img2 = os.path.join(samplers_prefix, '{}/{}/{}/{}_0.exr'.format(f.technique.name, f.tag, s.name, spp))
+                    if not os.path.isfile(img2):
+                        continue
 
-                call([exr2png_exec, img2])
+                    # skip results already computed
+                    errorsLogFilename = os.path.join(samplers_prefix, '{}/{}/{}/{}_0_errors.json'.format(f.technique.name, f.tag, s.name, spp))
+                    if not args.overwrite:
+                        if os.path.isfile(errorsLogFilename):
+                            if os.path.getctime(errorsLogFilename) > os.path.getctime(img2) and os.path.getctime(errorsLogFilename) > os.path.getctime(img1):
+                                continue
 
-                # compare the full result with the ground truth end parse errors
-                p = Popen([compare_exec, '--save-maps', '--save-errors', img1, img2], stdout=PIPE, stdin=PIPE, stderr=PIPE)
-                p.wait()
-                # copy maps and errors log to results folder
-                shutil.move('errors.json', errorsLogFilename)
-                shutil.move('mse_map.png', os.path.join(current_slot_dir, '{}/{}/{}/{}_0_mse_map.png'.format(f.technique.name, f.tag, s.name, spp)))
-                shutil.move('rmse_map.png', os.path.join(current_slot_dir, '{}/{}/{}/{}_0_rmse_map.png'.format(f.technique.name, f.tag, s.name, spp)))
-                shutil.move('ssim_map.png', os.path.join(current_slot_dir, '{}/{}/{}/{}_0_ssim_map.png'.format(f.technique.name, f.tag, s.name, spp)))
-                print('{}, {}, {} spp'.format(f.get_name(), s.name, str(spp)))
+                    call([exr2png_exec, img2])
+
+                    # compare the full result with the ground truth end parse errors
+                    p = Popen([compare_exec, '--save-maps', '--save-errors', img1, img2], stdout=PIPE, stdin=PIPE, stderr=PIPE)
+                    p.wait()
+                    # copy maps and errors log to results folder
+                    shutil.move('errors.json', errorsLogFilename)
+                    shutil.move('mse_map.png', os.path.join(samplers_prefix, '{}/{}/{}/{}_0_mse_map.png'.format(f.technique.name, f.tag, s.name, spp)))
+                    shutil.move('rmse_map.png', os.path.join(samplers_prefix, '{}/{}/{}/{}_0_rmse_map.png'.format(f.technique.name, f.tag, s.name, spp)))
+                    shutil.move('ssim_map.png', os.path.join(samplers_prefix, '{}/{}/{}/{}_0_ssim_map.png'.format(f.technique.name, f.tag, s.name, spp)))
+                    print('{}, {}, {} spp'.format(f.get_name(), s.name, str(spp)))
 
 
 def print_table(table_title, rows_title, cols_title, rows_labels, cols_labels, data, row_size=20, col_size=8):
@@ -1338,7 +1358,6 @@ def get_slots():
 
 
 def cmd_slots(args):
-    init()
     slots, current_slot = get_slots()
     print('{0}{1:<4s}{2:<16}{3:<20s}'.format(' ', 'Id', 'Creation Date', 'Name'))
     print('{0:75s}'.format('-'*75))
@@ -1383,20 +1402,23 @@ def cmd_slots_select(args):
 
 def cmd_serve(args):
     stdout = sys.stderr
-    if not os.path.isdir(page_dir):
-        shutil.copytree(os.path.join(install_prefix_dir, 'share/fbksd/page'), page_dir, symlinks=True)
 
-    try:
-        os.chdir(page_dir)
-        Handler = http.server.SimpleHTTPRequestHandler
-        httpd = socketserver.TCPServer(('', 8000), Handler)
-        print('serving at port 8000. Press Ctrl-C to finish.')
-        f = open(os.devnull, 'w')
-        sys.stderr = f
-        httpd.serve_forever()
-    except KeyboardInterrupt:
-        sys.stderr = stdout
-        print('\b\bfinished.')
+    if os.path.isdir(current_slot_dir) and os.path.isdir(scenes_dir):
+        orig_page = os.path.join(install_prefix_dir, 'share/fbksd/page/')
+        subprocess.run(['rsync', '-a', '--delete', orig_page, page_dir])
+        try:
+            os.chdir(page_dir)
+            Handler = http.server.SimpleHTTPRequestHandler
+            httpd = socketserver.TCPServer(('', 8000), Handler)
+            print('serving at port 8000. Press Ctrl-C to finish.')
+            f = open(os.devnull, 'w')
+            sys.stderr = f
+            httpd.serve_forever()
+        except KeyboardInterrupt:
+            sys.stderr = stdout
+            print('\b\bfinished.')
+    else:
+        print('ERROR: This is not a fbksd workspace directory.')
 
 
 
@@ -1414,6 +1436,12 @@ class ManHelpFormater(argparse.RawDescriptionHelpFormatter):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(prog='fbksd', description='fbksd system cli interface.')
     subparsers = parser.add_subparsers(title='subcommands', description='\n  Test description')
+
+    # init
+    parserInit = subparsers.add_parser('init', help='Creates an empty workspace in the current directory.')
+    parserInit.add_argument('--slot-name', help='Name of the result slot (default: \"Results 1\")')
+    parserInit.add_argument('--scenes-dir', help='Path to a scenes folder. A link to that folder is created in the current directory.')
+    parserInit.set_defaults(func=cmd_init)
 
     # update
     parserUpdate = subparsers.add_parser('update', help='update data shown on the results page.')
