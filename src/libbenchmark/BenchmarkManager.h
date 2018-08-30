@@ -1,7 +1,7 @@
 #ifndef BENCHMARKMANAGER_H
 #define BENCHMARKMANAGER_H
 
-#include "fbksd/core/Definitions.h"
+#include "fbksd/core/definitions.h"
 #include "fbksd/core/SharedMemory.h"
 #include "RenderClient.h"
 #include "CfgParser.h"

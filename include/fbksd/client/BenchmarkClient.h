@@ -1,7 +1,7 @@
 #ifndef BENCHMARKCLIENT_H
 #define BENCHMARKCLIENT_H
 
-#include "fbksd/core/Definitions.h"
+#include "fbksd/core/definitions.h"
 #include <vector>
 #include <string>
 #include <map>

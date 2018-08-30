@@ -1,0 +1,8 @@
+#ifndef FBKSD_VERSION_H
+#define FBKSD_VERSION_H
+
+constexpr unsigned FBKSD_VERSION_MAJOR = @PROJECT_VERSION_MAJOR@;
+constexpr unsigned FBKSD_VERSION_MINOR = @PROJECT_VERSION_MINOR@;
+constexpr unsigned FBKSD_VERSION_PATCH = @PROJECT_VERSION_PATCH@;
+
+#endif

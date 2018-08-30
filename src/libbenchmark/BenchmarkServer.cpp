@@ -1,5 +1,6 @@
 #include "BenchmarkServer.h"
 #include "BenchmarkManager.h"
+#include "version.h"
 #include <rpc/server.h>
 
 
@@ -7,6 +8,8 @@
 BenchmarkServer::BenchmarkServer():
     m_server(std::make_unique<rpc::server>("127.0.0.1", 2226))
 {
+    m_server->bind("GET_VERSION", []()
+    { return std::make_pair(FBKSD_VERSION_MAJOR, FBKSD_VERSION_MINOR); });
 }
 
 BenchmarkServer::~BenchmarkServer() = default;

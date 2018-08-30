@@ -11,10 +11,17 @@ set(SRCS RenderingServer.cpp
          SamplesPipe.cpp
          samples.cpp )
 
-add_library(renderer ${SRCS} ${HEADERS})
+add_library(renderer SHARED ${SRCS} ${HEADERS})
 add_library(fbksd::renderer ALIAS renderer)
-target_link_libraries(renderer PUBLIC fbksd::core)
-set_target_properties(renderer PROPERTIES OUTPUT_NAME "fbksd-renderer")
+target_link_libraries(renderer PUBLIC core)
+set_target_properties(renderer PROPERTIES
+    OUTPUT_NAME "fbksd-renderer"
+    VERSION ${PROJECT_VERSION_MAJOR}
+)
+target_include_directories(renderer PUBLIC
+    $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>
+    $<INSTALL_INTERFACE:include>
+)
 install(TARGETS renderer
     EXPORT fbksdTargets
     LIBRARY DESTINATION lib

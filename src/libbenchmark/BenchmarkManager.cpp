@@ -76,7 +76,7 @@ void BenchmarkManager::runPassive(int spp)
 {
     m_passiveMode = true;
     m_benchmarkServer->run(/*2226*/);
-    m_renderClient = std::make_unique<RenderClient>(this, 2227);
+    m_renderClient = std::make_unique<RenderClient>(2227);
     m_currentSceneInfo = m_renderClient->getSceneInfo();
     m_currentSceneInfo.set("max_spp", spp);
     m_currentSceneInfo.set("max_samples", spp * getPixelCount(m_currentSceneInfo));
@@ -106,7 +106,7 @@ void BenchmarkManager::runScene(const QString& rendererPath,
     // Start the render client
     // FIXME: setting client port manually here. Maybe all renderers should use the same port anyway?
     waitPortOpen(2227);
-    m_renderClient = std::make_unique<RenderClient>(this, 2227);
+    m_renderClient = std::make_unique<RenderClient>(2227);
     m_currentSceneInfo = m_renderClient->getSceneInfo();
     if(spp)
     {
@@ -224,7 +224,7 @@ void BenchmarkManager::runAll(const QString& configPath,
 #endif
                     // Start the render client
                     waitPortOpen(2227);
-                    m_renderClient = std::make_unique<RenderClient>(this, 2227);
+                    m_renderClient = std::make_unique<RenderClient>(2227);
                     m_currentSceneInfo = m_renderClient->getSceneInfo();
                     allocateResultShm(getPixelCount(m_currentSceneInfo));
                 }

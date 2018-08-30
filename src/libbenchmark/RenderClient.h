@@ -1,7 +1,7 @@
 #ifndef RENDERCLIENT_H
 #define RENDERCLIENT_H
 
-#include "fbksd/core/Definitions.h"
+#include "fbksd/core/definitions.h"
 
 #include <vector>
 #include <string>
@@ -18,7 +18,7 @@ namespace rpc { class client; }
 class RenderClient
 {
 public:
-    RenderClient(BenchmarkManager* manager, int port);
+    RenderClient(int port);
 
     ~RenderClient();
 
@@ -61,7 +61,6 @@ public:
     void finishRender();
 
 private:
-    BenchmarkManager *manager;
     std::unique_ptr<rpc::client> m_client;
 };
 

@@ -2,6 +2,7 @@
 #define SAMPLESPIPE_H
 
 #include "fbksd/renderer/samples.h"
+#include "fbksd/core/SampleLayout.h"
 
 
 // This is need for the next classes due to the static members

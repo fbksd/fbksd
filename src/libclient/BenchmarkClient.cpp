@@ -1,8 +1,9 @@
 #include "fbksd/client/BenchmarkClient.h"
-#include "fbksd/core/Definitions.h"
+#include "fbksd/core/definitions.h"
 #include "fbksd/core/SharedMemory.h"
 #include "BenchmarkManager.h"
 #include "tcp_utils.h"
+#include "version.h"
 
 #include <rpc/client.h>
 #include <iostream>
@@ -56,12 +57,19 @@ struct BenchmarkClient::Imp
         {
             po::options_description desc("Allowed options");
             desc.add_options()
+                    ("fbksd-version", "Print version number.")
                     ("fbksd-renderer", po::value<std::string>(), "Calls a renderer server.")
                     ("fbksd-spp", po::value<int>(), "Number of samples poer pixel.");
 
             po::variables_map vm;
             po::store(po::command_line_parser(argc, argv).options(desc).allow_unregistered().run(), vm);
             po::notify(vm);
+
+            if(vm.count("fbksd-version"))
+            {
+                std::cout << FBKSD_VERSION_MAJOR << "." << FBKSD_VERSION_MINOR << "." << FBKSD_VERSION_PATCH << std::endl;
+                exit(0);
+            }
 
             if(vm.count("fbksd-renderer") || vm.count("fbksd-spp"))
             {
@@ -91,6 +99,16 @@ struct BenchmarkClient::Imp
         }
 
         m_client = std::make_unique<rpc::client>("127.0.0.1", 2226);
+
+        // verify server version compatibility
+        auto version = m_client->call("GET_VERSION").as<std::pair<int,int>>();
+        if(version.first != FBKSD_VERSION_MAJOR)
+        {
+            auto error = std::string("Benchmark server version (") +
+                    std::to_string(version.first) + ") is incompatible with client version (" +
+                    std::to_string(FBKSD_VERSION_MAJOR) + ").";
+            throw std::runtime_error(error);
+        }
     }
 
     ~Imp()

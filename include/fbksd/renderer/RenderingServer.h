@@ -2,7 +2,7 @@
 #define RENDERINGSERVER_H
 
 #include "SamplesPipe.h"
-#include "fbksd/core/Definitions.h"
+#include "fbksd/core/definitions.h"
 #include "fbksd/core/SharedMemory.h"
 #include <map>
 #include <memory>

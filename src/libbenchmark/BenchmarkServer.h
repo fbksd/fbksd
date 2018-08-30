@@ -1,7 +1,7 @@
 #ifndef BENCHMARK_SERVER_H
 #define BENCHMARK_SERVER_H
 
-#include "fbksd/core/Definitions.h"
+#include "fbksd/core/definitions.h"
 
 class BenchmarkManager;
 namespace rpc { class server; }

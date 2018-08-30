@@ -1,4 +1,5 @@
 #include "fbksd/renderer/RenderingServer.h"
+#include "version.h"
 
 #include <rpc/server.h>
 #include <rpc/this_server.h>
@@ -58,6 +59,8 @@ struct RenderingServer::Imp
 RenderingServer::RenderingServer() :
     m_imp(std::make_unique<Imp>())
 {
+    m_imp->m_server->bind("GET_VERSION", []()
+    { return std::make_pair(FBKSD_VERSION_MAJOR, FBKSD_VERSION_MINOR); });
     m_imp->m_server->bind("GET_SCENE_DESCRIPTION",
         [this](){return m_imp->_getSceneInfo();});
     m_imp->m_server->bind("SET_PARAMETERS",
