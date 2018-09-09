@@ -1,0 +1,780 @@
+#!/usr/bin/env python3
+
+import argparse
+from argparse import RawTextHelpFormatter
+import os.path
+import sys
+import shutil
+import subprocess
+import json
+import itertools
+import time
+import http.server
+import socketserver
+
+
+#=============================================
+#                Common paths                #
+#=============================================
+install_prefix_dir = '@INSTALL_PREFIX@'
+scenes_dir         = os.path.join(os.getcwd(), 'scenes')
+renderers_dir      = os.path.join(os.getcwd(), 'renderers')
+denoisers_dir      = os.path.join(os.getcwd(), 'denoisers')
+samplers_dir       = os.path.join(os.getcwd(), 'samplers')
+configs_dir        = os.path.join(os.getcwd(), 'configs')
+current_config     = os.path.join(configs_dir, '.current.json')
+page_dir           = os.path.join(os.getcwd(), '.page')
+results_dir        = os.path.join(os.getcwd(), 'results')
+current_slot_dir   = os.path.join(results_dir, '.current')
+scenes_profile     = os.path.join(scenes_dir, 'scenes.xml')
+
+sys.path.append(os.path.join(install_prefix_dir, 'share/fbksd/python'))
+from fbksd import *
+
+
+#=============================================
+#              Global variables              #
+#=============================================
+g_filters = {}
+g_filters_names = {}
+g_filters_versions = {}
+g_samplers = {}
+g_samplers_names = {}
+g_samplers_versions = {}
+g_renderers = {}
+g_scenes = {}
+g_scenes_names = {}
+g_persistent_state = None
+g_scenes_loaded = False
+g_filters_loaded = False
+g_samplers_loaded = False
+g_results_loaded = False
+g_samplers_results_loaded = False
+
+
+def load_scenes_g():
+    global g_scenes, g_scenes_names, g_renderers
+    g_scenes, g_scenes_names, g_renderers = load_scenes(scenes_profile)
+
+
+def load_filters_g():
+    global g_filters, g_filters_names, g_filters_versions
+    g_filters, g_filters_names, g_filters_versions = load_filters(denoisers_dir)
+
+
+def load_samplers_g():
+    global g_samplers, g_samplers_names, g_samplers_versions
+    g_samplers, g_samplers_names, g_samplers_versions = load_samplers(samplers_dir)
+
+
+def load_results_g():
+    global g_filters, g_scenes
+    load_filters_results(g_filters, g_scenes, current_slot_dir)
+
+
+def load_samplers_results_g():
+    global g_samplers, g_scenes
+    load_samplers_results(g_samplers, g_scenes, current_slot_dir)
+
+
+def save_scenes_file_g(scenes_ids):
+    save_scenes_file(scenes_ids, g_scenes, current_slot_dir)
+
+
+def save_filters_file_g(scenes_ids, filters_ids):
+    save_techniques_file(scenes_ids, scenes_ids, g_filters, os.path.join(current_slot_dir, 'filters.json'))
+
+
+def save_samplers_file_g(scenes_ids, samplers_ids):
+    save_techniques_file(scenes_ids, scenes_ids, g_samplers, os.path.join(current_slot_dir, 'samplers.json'))
+
+
+def save_results_file_g(scenes_ids, filters_ids):
+    save_filters_result_file(current_slot_dir, scenes_ids, g_filters, filters_ids)
+
+
+def save_samplers_results_file_g(scenes_ids, samplers_ids):
+    save_samplers_result_file(current_slot_dir, scenes_ids, g_samplers, samplers_ids)
+
+
+#=============================================
+#               Procedures                   #
+#=============================================
+
+
+def cmd_init(args):
+    if not os.path.isdir(renderers_dir):
+        os.mkdir(renderers_dir)
+
+    if not os.path.isdir(denoisers_dir):
+        os.mkdir(denoisers_dir)
+
+    if not os.path.isdir(samplers_dir):
+        os.mkdir(samplers_dir)
+
+    if not os.path.isdir(configs_dir):
+        os.mkdir(configs_dir)
+
+    if not os.path.isdir(results_dir):
+        new_slot_name = 'Results 1'
+        if args.slot_name:
+            new_slot_name = args.slot_name
+        new_slot_path = os.path.join(results_dir, new_slot_name)
+        os.makedirs(new_slot_path)
+        os.symlink(new_slot_name, os.path.join(results_dir, '.current'))
+
+    if not os.path.isdir(scenes_dir):
+        if args.scenes_dir:
+            if os.path.isdir(args.scenes_dir):
+                os.symlink(os.path.abspath(args.scenes_dir), 'scenes')
+            else:
+                print('ERROR: \"{}\" is not an existing directory.\n'.format(args.scenes_dir))
+        else:
+            os.mkdir(scenes_dir)
+
+
+def cmd_config(args):
+    configs, current = get_configs(configs_dir, current_config)
+    print('{0}{1:<4s}{2:<16}{3:<20s}'.format(' ', 'Id', 'Creation Date', 'Name'))
+    print('{0:75s}'.format('-'*75))
+    for i, config in enumerate(configs):
+        pretty_ctime = time.strftime('%d/%m/%Y', time.gmtime(config['ctime']))
+        name = config['name']
+        if current == config['name']:
+            print('* {0:<3s}{1:<16}{2:<20s}'.format(str(i+1), pretty_ctime, name))
+        else:
+            print('  {0:<3s}{1:<16}{2:<20s}'.format(str(i+1), pretty_ctime, name))
+    print('{0:75s}'.format('-'*75))
+
+
+def cmd_config_new(args):
+    new_config_file = os.path.join(configs_dir, args.name + '.json')
+    if os.path.exists(new_config_file):
+        print('ERROR: Config {} already exists.'.format(args.name))
+        return
+    if args.name[0] == '.':
+        print('ERROR: Config name can not start with dot.')
+        return
+
+    load_scenes_g()
+    scenes = []
+    if args.scenes_all:
+        scenes = g_scenes.values()
+    else:
+        scenes = scenesFromIds(args.scenes, g_scenes)
+
+    load_filters_g()
+    filters = []
+    if args.filters_all:
+        filters = g_filters.values()
+    else:
+        filters = techniqueVersionsFromIds(args.filters, g_filters_versions)
+
+    load_samplers_g()
+    samplers = []
+    if args.samplers_all:
+        samplers = g_samplers.values()
+    else:
+        samplers = techniqueVersionsFromIds(args.samplers, g_samplers_versions)
+
+    spps = []
+    if args.spps:
+        spps = list(set(args.spps))
+        spps.sort()
+    else:
+        spps = [2, 4, 8, 16]
+
+    root_node = new_config(scenes, filters, samplers, spps)
+    with open(new_config_file, 'w') as outfile:
+        json.dump(root_node, outfile, indent=4)
+
+    if os.path.islink(current_config):
+        os.unlink(current_config)
+    os.symlink(args.name + '.json', current_config)
+
+
+def cmd_config_select(args):
+    configs, current = get_configs(configs_dir, current_config)
+    if args.id < 1 or args.id > len(configs):
+        print('ERROR: Invalid config ID.')
+        return
+
+    if os.path.islink(current_config):
+        os.unlink(current_config)
+    name = configs[args.id - 1]['name']
+    os.symlink(name + '.json', current_config)
+    print('Selected configuration: ' + name)
+
+
+def cmd_config_show(args):
+    if args.id:
+        configs, current = get_configs(configs_dir, current_config)
+        if args.id < 1 or args.id > len(configs):
+            print('ERROR: Invalid config ID.')
+            return
+        config_file = os.path.join(configs_dir, configs[args.id - 1]['name'] + '.json')
+    else:
+        config_file = current_config
+
+    with open(config_file) as f:
+        config = json.load(f)
+        print(json.dumps(config, indent=4, sort_keys=True))
+
+
+def cmd_update(args):
+    load_scenes_g()
+    load_filters_g()
+    load_samplers_g()
+    load_results_g()
+    load_samplers_results_g()
+
+    scenes_ids = g_scenes.keys()
+    filters_ids = g_filters.keys()
+    samplers_ids = g_samplers.keys()
+
+    save_scenes_file_g(scenes_ids)
+    save_filters_file_g(scenes_ids, filters_ids)
+    save_samplers_file_g(scenes_ids, samplers_ids)
+    save_results_file_g(scenes_ids, filters_ids)
+    save_samplers_results_file_g(scenes_ids, samplers_ids)
+
+
+def cmd_filters(args):
+    load_filters_g()
+    print('{0:<5s}{1:<20s}{2:<10s}'.format('Id', 'Name', 'Status'))
+    print('{0:75s}'.format('-'*75))
+    for id, v in g_filters_versions.items():
+        if v.tag == 'default':
+            print('{0:<5s}{1:<20s}{2:<10s}'.format(str(id), v.technique.name, v.status))
+        else:
+            print('{0:<5s}{1:<20s}{2:<10s}'.format(str(id), v.technique.name + '-{}'.format(v.tag), v.status))
+    print('{0:75s}'.format('-'*75))
+
+
+def cmd_samplers(args):
+    load_samplers_g()
+    if not g_samplers_versions:
+        print('No samplers found.')
+        return
+
+    print('{0:<5s}{1:<20s}{2:<10s}'.format('Id', 'Name', 'Status'))
+    print('{0:75s}'.format('-'*75))
+    for id, v in g_samplers_versions.items():
+        if v.tag == 'default':
+            print('{0:<5s}{1:<20s}{2:<10s}'.format(str(id), v.technique.name, v.status))
+        else:
+            print('{0:<5s}{1:<20s}{2:<10s}'.format(str(id), v.technique.name + '-{}'.format(v.tag), v.status))
+    print('{0:75s}'.format('-'*75))
+
+
+def cmd_filter_info(args):
+    load_filters_g()
+    filters = techniqueVersionsFromIds(args.filters, g_filters_versions)
+
+    for f in filters:
+        print('Name:      {}'.format(f.technique.name))
+        print('Full name: {}'.format(f.technique.full_name))
+        print('Comment:   {}'.format(f.technique.comment))
+        print('Citation:  {}'.format(f.technique.citation))
+        print('Versions:')
+        for version in f.technique.versions:
+            print('{}'.format(version.id))
+            print('    Name:    {}'.format(version.tag))
+            print('    Message: {}'.format(version.message))
+
+
+def cmd_sampler_info(args):
+    load_samplers_g()
+    samplers = techniqueVersionsFromIds(args.samplers, g_samplers_versions)
+
+    for f in samplers:
+        print('Name:      {}'.format(f.technique.name))
+        print('Full name: {}'.format(f.technique.full_name))
+        print('Comment:   {}'.format(f.technique.comment))
+        print('Citation:  {}'.format(f.technique.citation))
+        print('Versions:')
+        for version in f.technique.versions:
+            print('{}'.format(version.id))
+            print('    Name:    {}'.format(version.tag))
+            print('    Message: {}'.format(version.message))
+
+
+def cmd_scenes(args):
+    if args.set:
+        if os.path.isdir(args.set):
+            if os.path.islink(scenes_dir):
+                os.unlink(scenes_dir)
+            os.symlink(os.path.abspath(args.set), 'scenes')
+            print('Scenes path set.\n')
+            return
+        else:
+            print('ERROR: \"{}\" is not an existing directory.\n'.format(args.set))
+            return
+
+    if not os.path.exists(scenes_profile):
+        print('ERROR: Scenes directory not set (see \"--set\" option).\n')
+        return
+
+    load_scenes_g()
+    print('{0:<5s}{1:<50s}{2:<20s}'.format('Id', 'Name', 'Renderer'))
+    print('{0:75s}'.format('-'*75))
+    for sid, scene in g_scenes.items():
+        print('{0:<5s}{1:<50s}{2:<20s}'.format(str(sid), scene.name, scene.renderer.name))
+    print('{0:75s}'.format('-'*75))
+
+
+def cmd_run(args):
+    if not os.path.exists(current_config):
+        print("ERROR: No current configuration.")
+
+    load_scenes_g()
+    load_filters_g()
+    load_samplers_g()
+    config_filename = '/tmp/benchmark_config.json'
+    config = writeTempConfig(config_filename, current_config, renderers_dir, g_renderers, scenes_dir, g_scenes_names)
+    if not config:
+        print('Nothing to run.')
+    print('Running configuration \'' + currentConfigName(current_config) + '\'\n')
+
+    benchmark_exec = os.path.join(install_prefix_dir, 'bin/fbksd-benchmark')
+    run_techniques(
+        benchmark_exec,
+        denoisers_dir,
+        config['filters'],
+        g_filters_names,
+        os.path.join(current_slot_dir, 'denoisers'),
+        config_filename,
+        args.overwrite
+    )
+
+    run_techniques(
+        benchmark_exec,
+        samplers_dir,
+        config['samplers'],
+        g_samplers_names,
+        os.path.join(current_slot_dir, 'samplers'),
+        config_filename,
+        args.overwrite
+    )
+
+
+# computes errors for each result image and saves a corresponding log file for each one.
+# overwrite logs that are older then the corresponding result images
+def cmd_results_compute(args):
+    load_scenes_g()
+
+    compare_exec = os.path.join(install_prefix_dir, 'bin/fbksd-compare')
+    exr2png_exec = os.path.join(install_prefix_dir, 'bin/fbksd-exr2png')
+
+    compare_techniques_results(
+        os.path.join(current_slot_dir, 'denoisers'),
+        g_scenes_names,
+        scenes_dir,
+        exr2png_exec,
+        compare_exec,
+        args.overwrite
+    )
+
+    compare_techniques_results(
+        os.path.join(current_slot_dir, 'samplers'),
+        g_scenes_names,
+        scenes_dir,
+        exr2png_exec,
+        compare_exec,
+        args.overwrite
+    )
+
+
+def cmd_results_show(args):
+    load_scenes_g()
+    load_filters_g()
+    load_results_g()
+    filters = techniqueVersionsFromIds(args.filters, g_filters_versions)
+    if not filters:
+        return
+
+    metrics = []
+    if args.mse:
+        metrics.append('mse')
+    if args.psnr:
+        metrics.append('psnr')
+    if args.ssim:
+        metrics.append('ssim')
+    if not metrics:
+        metrics = ['mse', 'psnr', 'ssim']
+
+    filters_names = [f.get_name() for f in filters]
+    for scene in list(g_scenes.values()):
+        for metric in metrics:
+            data = [[None for y in scene.spps] for x in filters]
+            spps_names = [str(spp) for spp in scene.spps]
+            table_has_results = False
+            for row_i, v in enumerate(filters):
+                for col_i, spp in enumerate(scene.spps):
+                    result = v.get_result(scene, spp)
+                    if result:
+                        data[row_i][col_i] = getattr(result, metric)
+                        table_has_results = True
+            if table_has_results:
+                print_table(scene.name, ' ', metric, filters_names, spps_names, data)
+
+
+def cmd_results_rank(args):
+    load_scenes_g()
+    load_filters_g()
+    load_results_g()
+    filters = techniqueVersionsFromIds(args.filters, g_filters_versions)
+    if not filters:
+        return
+
+    scenes = scenesFromIds(args.scenes, g_scenes)
+    if not scenes:
+        return
+
+    metrics = []
+    if args.mse:
+        metrics.append('mse')
+    if args.psnr:
+        metrics.append('psnr')
+    if args.ssim:
+        metrics.append('ssim')
+    if not metrics:
+        metrics = ['mse', 'psnr', 'ssim']
+
+    filters_names = [f.get_name() for f in filters]
+    for metric in metrics:
+        data = [[None for y in filters] for x in scenes]
+        scenes_names = [s.name for s in scenes]
+        table_has_results = False
+        for row_i, s in enumerate(scenes):
+            for col_i, v in enumerate(filters):
+                mean_error = 0.0
+                n_errors = 0
+                for spp in s.spps:
+                    result = v.get_result(s, spp)
+                    if result:
+                        mean_error += getattr(result, metric)
+                        n_errors += 1
+                if n_errors > 0:
+                    mean_error /= n_errors
+                data[row_i][col_i] = mean_error
+                table_has_results = True
+
+        all_scenes_mean = [0.0 for y in filters]
+        non_null_count = [0 for y in filters]
+        for row_i, s in enumerate(scenes):
+            for col_i, v in enumerate(filters):
+                error = data[row_i][col_i]
+                if error:
+                    all_scenes_mean[col_i] += error
+                    non_null_count[col_i] += 1
+        for col_i, v in enumerate(filters):
+            if non_null_count[col_i]:
+                all_scenes_mean[col_i] /= non_null_count[col_i]
+
+        if table_has_results:
+            print_table(metric, ' ', 'Filters', scenes_names, filters_names, data, 30, 20)
+            print_table(metric, ' ', 'Filters', ['All scenes error mean'], filters_names, [all_scenes_mean], 30, 20)
+
+
+def print_table_csv(data):
+    for row in data:
+        for value in row:
+            if value:
+                print('{:.4f},'.format(value), end='')
+            else:
+                print('{:.4f},'.format(0.0), end='')
+        print()
+
+
+def cmd_results_export_csv(args):
+    load_scenes_g()
+    load_filters_g()
+    load_results_g()
+    filters = techniqueVersionsFromIds(args.filters, g_filters_versions)
+    if not filters:
+        return
+
+    scenes = scenesFromIds(args.scenes, g_scenes)
+    if not scenes:
+        return
+
+    metrics = ['mse', 'psnr', 'ssim']
+    if args.metrics:
+        metrics = args.metrics
+
+    mse_scale = 1.0
+    if args.mse_scale:
+        mse_scale = args.mse_scale
+
+    rmse_scale = 1.0
+    if args.rmse_scale:
+        rmse_scale = args.rmse_scale
+
+    data = []
+    row_i = 0
+    for scene in scenes:
+        spps = []
+        if args.spps:
+            spps = args.spps
+        else:
+            spps = scene.spps
+        for spp in spps:
+            data.append([None for y in itertools.product(filters, metrics)])
+            col_i = 0
+            for f in filters:
+                result = f.get_result(scene, spp)
+                for metric in metrics:
+                    if result:
+                        if metric == 'mse':
+                            data[row_i][col_i] = getattr(result, metric) * mse_scale
+                        elif metric == 'rmse':
+                            data[row_i][col_i] = getattr(result, metric) * rmse_scale
+                        else:
+                            data[row_i][col_i] = getattr(result, metric)
+                    col_i += 1
+            row_i += 1
+    print_table_csv(data)
+
+
+def cmd_export_page(args):
+    if os.path.isdir(args.dest):
+        if args.overwrite:
+            print('Overwriting existing destination.')
+            shutil.rmtree(args.dest)
+        else:
+            print('Destination already exists.')
+            return
+
+    # copy results
+    results_dest = os.path.join(args.dest, 'Results')
+    shutil.copytree(current_slot_dir, results_dest, ignore=shutil.ignore_patterns('*.exr', '*.json'))
+    shutil.copyfile(os.path.join(current_slot_dir, 'results.json'), os.path.join(args.dest, 'results.json'))
+    shutil.copyfile(os.path.join(current_slot_dir, 'scenes.json'), os.path.join(args.dest, 'scenes.json'))
+    shutil.copyfile(os.path.join(current_slot_dir, 'filters.json'), os.path.join(args.dest, 'filters.json'))
+    # copy references
+    references_dest = os.path.join(args.dest, 'references')
+    shutil.copytree(os.path.join(scenes_dir, 'references'), references_dest,
+                    ignore=shutil.ignore_patterns('*.exr', '*.log', '*.txt', '*.py', 'bad_imgs', 'partials', 'bad_partials'))
+
+
+
+def cmd_slots(args):
+    slots, current_slot = get_slots(results_dir)
+    print('{0}{1:<4s}{2:<16}{3:<20s}'.format(' ', 'Id', 'Creation Date', 'Name'))
+    print('{0:75s}'.format('-'*75))
+    for i, slot in enumerate(slots):
+        pretty_ctime = time.strftime('%d/%m/%Y', time.gmtime(slot['ctime']))
+        name = os.path.basename(slot['name'])
+        if current_slot == slot['name']:
+            print('* {0:<4s}{1:<16}{2:<20s}'.format(str(i+1), pretty_ctime, name))
+        else:
+            print('  {0:<4s}{1:<16}{2:<20s}'.format(str(i+1), pretty_ctime, name))
+    print('{0:75s}'.format('-'*75))
+
+
+def cmd_slots_new(args):
+    new_path = os.path.join(results_dir, args.name)
+    if os.path.exists(new_path):
+        print('ERROR: Slot {} already exists.'.format(args.name))
+        return
+
+    if not os.path.islink(current_slot_dir):
+        print('ERROR: {} is not a symlink.'.format(current_slot_dir))
+        return
+
+    os.mkdir(new_path)
+    os.unlink(current_slot_dir)
+    os.symlink(args.name, current_slot_dir)
+
+
+def cmd_slots_select(args):
+    slots, current_slot = get_slots(results_dir)
+    if args.id < 1 or args.id > len(slots):
+        print('ERROR: Invalid ID.')
+        return
+
+    if os.path.isdir(current_slot_dir):
+        if not os.path.islink(current_slot_dir):
+            print('ERROR: {} is not a symlink.'.format(current_slot_dir))
+            return
+        os.unlink(current_slot_dir)
+    os.symlink(slots[args.id - 1]['name'], current_slot_dir)
+
+
+def cmd_serve(args):
+    stdout = sys.stderr
+
+    if os.path.isdir(current_slot_dir) and os.path.isdir(scenes_dir):
+        orig_page = os.path.join(install_prefix_dir, 'share/fbksd/page/')
+        subprocess.run(['rsync', '-a', '--delete', orig_page, page_dir])
+        try:
+            os.chdir(page_dir)
+            Handler = http.server.SimpleHTTPRequestHandler
+            httpd = socketserver.TCPServer(('', 8000), Handler)
+            print('serving at port 8000. Press Ctrl-C to finish.')
+            f = open(os.devnull, 'w')
+            sys.stderr = f
+            httpd.serve_forever()
+        except KeyboardInterrupt:
+            sys.stderr = stdout
+            print('\b\bfinished.')
+    else:
+        print('ERROR: This is not a fbksd workspace directory.')
+
+
+
+#=============================================
+#                    Main                    #
+#=============================================
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(prog='fbksd', description='fbksd system cli interface.')
+    subparsers = parser.add_subparsers(title='subcommands', description='\n  Test description')
+
+    # init
+    parserInit = subparsers.add_parser('init', formatter_class=RawTextHelpFormatter,
+        help='Creates an empty workspace in the current directory.',
+        description=
+            'This is a test description for the cofig comand.\n\n'
+            'This is command is fucking awsome.'
+    )
+    parserInit.add_argument('--slot-name', help='Name of the result slot (default: \"Results 1\")')
+    parserInit.add_argument('--scenes-dir', help='Path to a scenes folder. A link to that folder is created in the current directory.')
+    parserInit.set_defaults(func=cmd_init)
+
+    # config
+    parserConfig = subparsers.add_parser('config', formatter_class=RawTextHelpFormatter,
+        help="Manage configurations.",
+        description=
+            'A configuration is a set of techniques and scenes to be executed. Each technique will be executed\n'
+            'for each scene with a range of sampler-per-pixel (spp), which can also be configured.\n'
+            'Subsequent commands like \'run\', \'results\', etc. will act on the current configuration.'
+    )
+    parserConfig.set_defaults(func=cmd_config)
+    configSubparsers = parserConfig.add_subparsers(title='subcommands')
+    # config new
+    parserConfigNew = configSubparsers.add_parser('new', help='Creates and selects a new configuration.')
+    parserConfigNew.add_argument('name', metavar='NAME', help='Configuration name')
+    parserConfigNew.add_argument('--scenes', nargs='+', type=int, metavar='SCENE_ID', help='Scenes to be included.')
+    parserConfigNew.add_argument('--scenes-all', action='store_true', help='Include all scenes.')
+    parserConfigNew.add_argument('--filters', nargs='+', type=int, metavar='FILTER_ID', help='Filters to be included.')
+    parserConfigNew.add_argument('--filters-all', action='store_true', help='Include all filters.')
+    parserConfigNew.add_argument('--samplers', nargs='+', type=int, metavar='SAMPLER_ID', help='Samplers to be included.')
+    parserConfigNew.add_argument('--samplers-all', action='store_true', help='Include all samplers.')
+    parserConfigNew.add_argument('--spps', metavar='SPP', type=int, nargs='+', help='List of spps to use.')
+    parserConfigNew.set_defaults(func=cmd_config_new)
+    # config select
+    parserConfigSelect = configSubparsers.add_parser('select', help='Select a configuration.')
+    parserConfigSelect.add_argument('id', type=int, metavar='CONFIG_ID', help='Id of the desired configuration.')
+    parserConfigSelect.set_defaults(func=cmd_config_select)
+    # config show
+    parserConfigShow = configSubparsers.add_parser('show', help='Show configuration details.')
+    parserConfigShow.add_argument('--id', type=int, metavar='CONFIG_ID', help='Id of the desired configuration.')
+    parserConfigShow.set_defaults(func=cmd_config_show)
+
+    # update
+    parserUpdate = subparsers.add_parser('update', help='update data shown on the results page.')
+    parserUpdate.set_defaults(func=cmd_update)
+
+    # filters
+    parserFilters = subparsers.add_parser('filters', formatter_class=RawTextHelpFormatter,
+        help='list all filters', description='List all filters')
+    parserFilters.set_defaults(func=cmd_filters)
+
+    # samplers
+    parserSamplers = subparsers.add_parser('samplers', help='List all samplers.', description="List all samplers.")
+    parserSamplers.set_defaults(func=cmd_samplers)
+
+    # scenes
+    parserScenes = subparsers.add_parser('scenes', help='list all scenes')
+    parserScenes.add_argument('--set', metavar='SCENES_DIR', help='Sets the scenes directory.')
+    parserScenes.set_defaults(func=cmd_scenes)
+
+    # filter-info, sampler-info
+    parserFilterInfo = subparsers.add_parser('filter-info', help='shows details about a filter')
+    parserFilterInfo.add_argument('filters', metavar='FILTER_ID', type=int, nargs='+', help='Filter ID.')
+    parserFilterInfo.set_defaults(func=cmd_filter_info)
+    parserSamplerInfo = subparsers.add_parser('sampler-info', help='shows details about a sampler')
+    parserSamplerInfo.add_argument('samplers', metavar='SAMPLER_ID', type=int, nargs='+', help='Sampler ID')
+    parserSamplerInfo.set_defaults(func=cmd_sampler_info)
+
+    # run
+    parserRun = subparsers.add_parser('run',
+        formatter_class=RawTextHelpFormatter,
+        help='Run the benchmark with the current configuration.',
+        description=
+            'Run the benchmark with the current configuration.\n\n'
+            'To run filters, use the \"--filters\" option passing the ids of the desired filters.\n'
+            'If no id is passed, all filters are selected by default.\n'
+            'If the \"--filters\" option is not used, no filter is executed.\n'
+            'The same behaviour is valid for the \"--samplers\" option.\n\n'
+            'To specify the scenes, use the \"--scenes\" option passing the ids of the desired scenes.\n'
+            'If this option is not used, or if no id is given, all scenes are selected.\n')
+    parserRun.set_defaults(func=cmd_run)
+    parserRun.add_argument('--overwrite', action='store_true', help='overwrite previous results.')
+
+    # results
+    parserResults = subparsers.add_parser('results', help='manipulate results')
+    resultsSubparsers = parserResults.add_subparsers(title='results subcommands')
+    # results compute
+    parserResultsCompute = resultsSubparsers.add_parser('compute', help='compute errors for the results saved in the results folder')
+    parserResultsCompute.add_argument('--overwrite', action='store_true', dest='overwrite', help='overwrite previous results.')
+    parserResultsCompute.set_defaults(func=cmd_results_compute)
+    # results show
+    parserResultsShow = resultsSubparsers.add_parser('show', help='list results')
+    parserResultsShow.add_argument('filters', nargs='*', type=int, help='filters ids.')
+    parserResultsShow.add_argument('samplers', nargs='*', type=int, help='samplers ids.')
+    parserResultsShow.add_argument('--ssim', action='store_true', help='Shows ssim error.')
+    parserResultsShow.add_argument('--mse', action='store_true', help='Shows mse error.')
+    parserResultsShow.add_argument('--psnr', action='store_true', help='Shows psnr error.')
+    parserResultsShow.set_defaults(func=cmd_results_show)
+    # results rank
+    parserResultsRank = resultsSubparsers.add_parser('rank', help='show a table ranking the filters')
+    parserResultsRank.add_argument('--filters', nargs='+', type=int, metavar='FILTER_ID', help='filters ids (default: all)')
+    parserResultsRank.add_argument('--samplers', nargs='+', type=int, metavar='SAMPLER_ID', help='samplers ids (default: all)')
+    parserResultsRank.add_argument('--scenes', nargs='+', type=int, metavar='SCENE_ID', help='scenes ids (default: all)')
+    parserResultsRank.add_argument('--ssim', action='store_true', help='Shows ssim error.')
+    parserResultsRank.add_argument('--mse', action='store_true', help='Shows mse error.')
+    parserResultsRank.add_argument('--psnr', action='store_true', help='Shows psnr error.')
+    parserResultsRank.set_defaults(func=cmd_results_rank)
+    # result export-csv
+    parserResultsExportCSV = resultsSubparsers.add_parser('export-csv', help='Prints a CSV table with the errors')
+    parserResultsExportCSV.add_argument('--filters', nargs='+', type=int, metavar='FILTER_ID', help='filters ids (default: all)')
+    parserResultsExportCSV.add_argument('--samplers', nargs='+', type=int, metavar='SAMPLER_ID', help='samplers ids (default: all)')
+    parserResultsExportCSV.add_argument('--scenes', nargs='+', type=int, metavar='SCENE_ID', help='scenes ids (default: all)')
+    parserResultsExportCSV.add_argument('--spps', metavar='SPP', type=int, dest='spps', nargs='+', help='list of spps to use (overwrite the ones defines in the profile)')
+    parserResultsExportCSV.add_argument('--mse-scale', type=float, dest='mse_scale', help='Scale applyed to the mse values')
+    parserResultsExportCSV.add_argument('--rmse-scale', type=float, dest='rmse_scale', help='Scale applyed to the rmse values')
+    parserResultsExportCSV.add_argument('--metrics', nargs='+', metavar='METRIC', help='List of metrics to export. Is this option is not used, all metrics are exported. Supported metrics are: mse, psnr, rmse, ssim')
+    parserResultsExportCSV.set_defaults(func=cmd_results_export_csv)
+    # results export
+    parserResultsExport = resultsSubparsers.add_parser(
+        'export',
+        help='Export results and reference images. This is usefull to view results in a different results page.'
+    )
+    parserResultsExport.add_argument('dest', metavar='DEST', help='Destination folder.')
+    parserResultsExport.add_argument('--overwrite', action='store_true', help='Overwrites DEST if it already exists.')
+    parserResultsExport.set_defaults(func=cmd_export_page)
+
+    # slots
+    parserSlots = subparsers.add_parser('slots', help='manage result slots')
+    parserSlots.set_defaults(func=cmd_slots)
+    slotsSubparsers = parserSlots.add_subparsers(title='slots subcommands')
+    # slots new
+    parserSlotsNew = slotsSubparsers.add_parser('new', help='Create (and select) a new slot.')
+    parserSlotsNew.add_argument('name', metavar='NAME', help='new slot name')
+    parserSlotsNew.set_defaults(func=cmd_slots_new)
+    # slots select
+    parserSlotsSelect = slotsSubparsers.add_parser('select', help='Select another slot.')
+    parserSlotsSelect.add_argument('id', type=int, metavar='SLOT_ID', help='Id of the desired slot')
+    parserSlotsSelect.set_defaults(func=cmd_slots_select)
+
+    # serve
+    parserServe = subparsers.add_parser('serve', help='Serve the results page on port 8000 (use Ctrl-C to exit).')
+    parserServe.set_defaults(func=cmd_serve)
+
+    args = parser.parse_args()
+    if hasattr(args, 'func'):
+        args.func(args)
+    else:
+        parser.print_help()

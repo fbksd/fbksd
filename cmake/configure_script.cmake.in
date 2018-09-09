@@ -2,4 +2,4 @@
 set(INSTALL_PREFIX "@CMAKE_INSTALL_PREFIX@")
 set(SRC_DIR "@CMAKE_SOURCE_DIR@")
 set(BIN_DIR "@CMAKE_BINARY_DIR@")
-configure_file(${SRC_DIR}/src/fbksd.py.in ${BIN_DIR}/src/fbksd.py)
+configure_file(${SRC_DIR}/share/fbksd/python/fbksd.py.in ${BIN_DIR}/fbksd.py)
