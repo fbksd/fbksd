@@ -1,5 +1,11 @@
+# Copyright (c) 2018 Jonas Deyson
+#
+# This software is released under the MIT License.
+#
+# You should have received a copy of the MIT License
+# along with this program. If not, see <https://opensource.org/licenses/MIT>
+
 import os.path
-import xml.etree.ElementTree as ET
 import json
 import glob
 import re
@@ -19,62 +25,56 @@ def cd(newdir):
         os.chdir(prevdir)
 
 
+def load_renderers(renderers_dir):
+    renderers = {}
+    with cd(renderers_dir):
+        files = glob.glob('*/info.json')
+        for file in files:
+            with open(file) as f:
+                data = json.load(f)
+                r = Renderer()
+                r.name = data['name']
+                r.path = data['exec']
+                r.is_ready = os.path.isfile(os.path.join(os.path.dirname(file), r.path))
+                renderers[r.name] = r
+    return renderers
+
+
 # Loads the scenes from the scenes_profile file
-def load_scenes(scenes_profile):
+def load_scenes(scenes_file, renderers_dir):
     g_scenes = {}
     g_scenes_names = {}
-    g_renderers = {}
 
-    if not os.path.isfile(scenes_profile):
+    if not os.path.exists(scenes_file):
         return {}, {}, {}
 
-    # load all available scenes
-    tree = ET.parse(scenes_profile)
-    root = tree.getroot()
-    for renderer in root.findall('rendering_server'):
-        r = Renderer()
-        r.name = renderer.get('name')
-        r.path = renderer.get('path')
-        for scene in renderer.find('scenes').findall('scene'):
+    scenes_cache = {}
+    with open(scenes_file) as f:
+        scenes_cache = json.load(f)
+
+    g_renderers = load_renderers(renderers_dir)
+
+    for renderer_item in scenes_cache:
+        renderer_name = renderer_item['renderer']
+        scenes = renderer_item['scenes']
+
+        if renderer_name in g_renderers:
+            renderer = g_renderers[renderer_name]
+        else:
+            renderer = Renderer()
+            renderer.name = renderer_name
+            g_renderers[renderer_name] = renderer
+
+        for scene in scenes:
             s = Scene()
-            s.renderer = r
-            s.name = scene.get('name')
-            s.path = scene.get('path')
-            s.ground_truth = scene.get('ground_truth')
-
-            if scene.find('dof_w') is not None:
-                s.dof_w = float(scene.find('dof_w').get('value'))
-            if scene.find('mb_w') is not None:
-                s.mb_w = float(scene.find('mb_w').get('value'))
-            if scene.find('ss_w') is not None:
-                s.ss_w = float(scene.find('ss_w').get('value'))
-            if scene.find('glossy_w') is not None:
-                s.glossy_w = float(scene.find('glossy_w').get('value'))
-            if scene.find('gi_w') is not None:
-                s.gi_w = float(scene.find('gi_w').get('value'))
-
-            spps = scene.find('spps').get('values').split()
-            spps = [int(i) for i in spps]
-            s.spps = spps
-
-            regions = scene.find('regions')
-            if regions:
-                for region in regions.findall('region'):
-                    regionEntry = ImageRegion()
-                    regionEntry.xmin = int(region.find('xmin').get('value'))
-                    regionEntry.ymin = int(region.find('ymin').get('value'))
-                    regionEntry.xmax = int(region.find('xmax').get('value'))
-                    regionEntry.ymax = int(region.find('ymax').get('value'))
-                    regionEntry.dof_w = float(region.find('dof_w').get('value'))
-                    regionEntry.mb_w = float(region.find('mb_w').get('value'))
-                    regionEntry.ss_w = float(region.find('ss_w').get('value'))
-                    regionEntry.glossy_w = float(region.find('glossy_w').get('value'))
-                    regionEntry.gi_w = float(region.find('gi_w').get('value'))
-                    s.regions.append(regionEntry)
-            r.scenes.append(s)
+            s.renderer = renderer
+            s.name = scene['name']
+            s.path = scene['path']
+            s.ground_truth = scene['ref-img']
+            renderer.scenes.append(s)
             g_scenes[s.id] = s
             g_scenes_names[s.name] = s
-        g_renderers[r.id] = r
+
     return g_scenes, g_scenes_names, g_renderers
 
 
@@ -87,10 +87,8 @@ def save_scenes_file(scenes_ids, g_scenes, current_slot_dir):
                       'ss_w':scene.ss_w, 'glossy_w':scene.glossy_w, 'gi_w':scene.gi_w}
         scene_dict['reference'] = os.path.splitext(str(scene.ground_truth))[0] + '.png'
         scene_dict['thumbnail'] = os.path.splitext(str(scene.ground_truth))[0] + '_thumb256.jpg'
-        spps = [{'spp_id':i, 'spp':spp} for i, spp in enumerate(scene.spps)]
         regions = [{'id':r.id, 'xmin':r.xmin, 'ymin':r.ymin, 'xmax':r.xmax, 'ymax':r.ymax,
                     'dof_w':r.dof_w, 'mb_w':r.mb_w, 'ss_w':r.ss_w, 'glossy_w':r.glossy_w, 'gi_w':r.gi_w} for r in scene.regions]
-        scene_dict['spps'] = spps
         scene_dict['regions'] = regions
         # data.append(scene_dict)
         data[scene.id] = scene_dict
@@ -173,9 +171,9 @@ def load_samplers(samplers_dir):
     return load_techniques(samplers_dir, sample_factory, sample_version_factory)
 
 
-def save_techniques_file(scenes_ids, versions_ids, techiques, filepath):
+def save_techniques_file(scenes_ids, versions_ids, techniques, filepath):
     data = []
-    for key, f in techiques.items():
+    for key, f in techniques.items():
         filter_dict = {
             'id': f.id,
             'name': f.name,
@@ -185,24 +183,23 @@ def save_techniques_file(scenes_ids, versions_ids, techiques, filepath):
         }
         versions = []
         for version in f.versions:
+            if not version.results:
+                continue
             if version.id not in versions_ids:
                 continue
 
-            version_dict = {
-                'id': version.id,
-                'tag': version.tag,
-                'message': version.message,
-                'status': version.status
-            }
-
-            if not version.results:
-                continue
             results_ids = []
             for result in version.results:
                 if result.scene.id in scenes_ids:
                     results_ids.append(result.id)
-            version_dict['results_ids'] = results_ids
-            versions.append(version_dict)
+
+            versions.append({
+                'id': version.id,
+                'tag': version.tag,
+                'message': version.message,
+                'status': version.status,
+                'results_ids': results_ids
+            })
 
         if not versions:
             continue
@@ -225,13 +222,17 @@ def load_techniques_results(techniques, g_scenes, techniques_dir, result_factory
                 version_results_dir = os.path.join(version_dir, scene.name)
                 if not os.path.isdir(version_results_dir):
                     continue
-                # FIXME: this doesn't load results with spps not in the scene spp list
-                for spp in scene.spps:
+
+                errors_logs = glob.glob(os.path.join(version_results_dir, '*_0_errors.json'))
+                for errors_log_filename in errors_logs:
+                    name = os.path.basename(errors_log_filename)
+                    m = re.match(r'(\d+)_.*errors\.json', name)
+                    if not m:
+                        continue
+                    spp = m.group(1)
+
                     result_img_filename = os.path.join(version_results_dir, '{}_0.exr'.format(spp))
                     if not os.path.isfile(result_img_filename):
-                        continue
-                    errors_log_filename = os.path.join(version_results_dir, '{}_0_errors.json'.format(spp))
-                    if not os.path.isfile(errors_log_filename):
                         continue
                     # skip old results
                     if os.path.getctime(result_img_filename) > os.path.getctime(errors_log_filename):
@@ -240,7 +241,7 @@ def load_techniques_results(techniques, g_scenes, techniques_dir, result_factory
                     result = result_factory()
                     result.filter_version = version
                     result.scene = scene
-                    result.spp = spp
+                    result.spp = int(spp)
                     main_log_filename = os.path.join(version_results_dir, '{}_0_log.json'.format(spp))
                     with open(main_log_filename) as log_file:
                         log_data = json.load(log_file)
@@ -272,7 +273,7 @@ def load_samplers_results(samplers, scenes, current_slot_dir):
     load_techniques_results(samplers, scenes, os.path.join(current_slot_dir, 'samplers'), result_factory)
 
 
-def save_techiques_result_file(filepath, scenes_ids, g_filters, versions_ids):
+def save_techniques_result_file(filepath, scenes_ids, g_filters, versions_ids):
     data = {}
     filters = list(g_filters.values())
     for f in filters:
@@ -302,11 +303,11 @@ def save_techiques_result_file(filepath, scenes_ids, g_filters, versions_ids):
 
 
 def save_filters_result_file(current_slot_dir, scenes_ids, filters, versions_ids):
-    save_techiques_result_file(os.path.join(current_slot_dir, 'results.json'), scenes_ids, filters, versions_ids)
+    save_techniques_result_file(os.path.join(current_slot_dir, 'results.json'), scenes_ids, filters, versions_ids)
 
 
 def save_samplers_result_file(current_slot_dir, scenes_ids, samplers, versions_ids):
-    save_techiques_result_file(os.path.join(current_slot_dir, 'samplers_results.json'), scenes_ids, samplers, versions_ids)
+    save_techniques_result_file(os.path.join(current_slot_dir, 'samplers_results.json'), scenes_ids, samplers, versions_ids)
 
 
 # get a list of ids and load the corresponding scenes
@@ -361,7 +362,7 @@ def get_configs(configs_dir, current_config_link):
 def new_config(scenes, filters, samplers, spps):
     scenes_by_renderer = {}
     for s in scenes:
-        if s.renderer.name in scenes_by_renderer:
+        if s.renderer.name not in scenes_by_renderer:
             scenes_by_renderer[s.renderer.name] = [s]
         else:
             scenes_by_renderer[s.renderer.name].append(s)
@@ -429,11 +430,11 @@ def writeTempConfig(config_filename, current_config, renderers_dir, renderers_g,
 
     for renderer in config['renderers']:
         renderer_obj = [r for r in renderers_g.values() if r.name == renderer['name']][0]
-        path = os.path.join(renderers_dir, renderer_obj.path)
+        path = os.path.join(renderers_dir, renderer_obj.name, renderer_obj.path)
         renderer['path'] = os.path.abspath(path)
         for scene in renderer['scenes']:
             scene_obj = scenes_names_g[scene['name']]
-            path = os.path.join(scenes_dir, scene_obj.path)
+            path = os.path.join(scenes_dir, renderer_obj.name, scene_obj.path)
             scene['path'] = os.path.abspath(path)
             # scene_info_node = {}
             # scene_info_node['has_dof'] = scene.dof_w > 0
@@ -448,7 +449,7 @@ def writeTempConfig(config_filename, current_config, renderers_dir, renderers_g,
     return config
 
 
-def currentConfigName(current_config_link):
+def current_config_name(current_config_link):
     return os.path.splitext(os.readlink(current_config_link))[0]
 
 
@@ -461,7 +462,11 @@ def run_techniques(benchmark_exec, techniques_prefix, techiques, g_techiques_nam
 
     for f in techiques:
         filt = g_techiques_names[f['name']]
-        for v in f['versions']:
+        if 'versions' in f:
+            versions = f['versions']
+        else:
+            versions = ['default']
+        for v in versions:
             version = [ver for ver in filt.versions if ver.tag == v][0]
             print('Benchmarking: {}'.format(version.get_name()))
             out_folder = os.path.join(slot_prefix, filt.name, version.tag)
@@ -481,7 +486,7 @@ def make_error_logs_dict():
     errors_dict = {}
     errors = glob.glob('*/*/*/*_errors.json')
     for error in errors:
-        m = re.match(r'(\w+)/(\w+)/(\w+)/(\d+)_.*errors\.json', error)
+        m = re.match(r'([a-zA-Z0-9_ ]+)/([a-zA-Z0-9_ ]+)/([a-zA-Z0-9_ ]+)/(\d+)_.*errors\.json', error)
         if m:
             technique_name = m.group(1)
             version_name = m.group(2)
@@ -526,7 +531,9 @@ def compare_techniques_results(results_prefix, scenes_names, scenes_dir, exr2png
         errors_dict = make_error_logs_dict()
 
         for r in results:
-            m = re.match(r'(\w+)/(\w+)/(\w+)/(\d+)_.*\.exr', r)
+            m = re.match(r'([a-zA-Z0-9_ ]+)/([a-zA-Z0-9_ ]+)/([a-zA-Z0-9_ ]+)/(\d+)_.*\.exr', r)
+            if not m:
+                continue
             technique_name = m.group(1)
             version_name = m.group(2)
             scene_name = m.group(3)
@@ -565,32 +572,59 @@ def compare_techniques_results(results_prefix, scenes_names, scenes_dir, exr2png
 
 
 def print_table(table_title, rows_title, cols_title, rows_labels, cols_labels, data, row_size=20, col_size=8):
-    row_label_size = row_size
-    col_label_size = col_size
+    row_label_size = row_size + 2
+    col_label_size = col_size + 2
     header_size = row_label_size + (col_label_size*len(cols_labels)) + len(cols_labels)
 
     # table title
-    print('═'*header_size)
-    print('{:^{header_size}s}'.format(table_title, header_size=header_size))
-    print('═'*header_size)
+    print('┌' + '─'*header_size + '┐')
+    print('│{:^{header_size}s}│'.format(table_title, header_size=header_size))
+    print('├' + '─'*header_size + '┤')
 
     if cols_title != '' and rows_title != '':
         # rows title
-        print('{0:^{col_width}s}│'.format(rows_title, col_width=row_label_size), end='')
+        print('│{0:^{col_width}s}│'.format(rows_title, col_width=row_label_size), end='')
         # cols title
         print('{0:^{col_width}s}│'.format(cols_title, col_width=len(cols_labels)*col_label_size + len(cols_labels) - 1))
 
-    print(' '*row_label_size + '│' + ('{:^{col_size}}│'*len(cols_labels)).format(*cols_labels, col_size=col_label_size))
+    print('│' + ' '*row_label_size + '│' + ('{:^{col_size}}│'*len(cols_labels)).format(*cols_labels, col_size=col_label_size))
     # print('─'*header_size)
     for row_i, row in enumerate(data):
-        print('{:<{row_label_size}.{row_label_size}s}│'.format(rows_labels[row_i], row_label_size=row_label_size), end='')
+        print('│{:<{row_label_size}.{row_label_size}s}│'.format(rows_labels[row_i], row_label_size=row_label_size), end='')
         for value in row:
             if value:
-                print('{0:={col_size}.2f}│'.format(value, col_size=col_label_size), end='')
+                print('{0:={col_size}.6f}│'.format(value, col_size=col_label_size), end='')
             else:
-                print('{0:^{col_size}.2s}│'.format('', col_size=col_label_size), end='')
+                print('{0:^{col_size}.6s}│'.format('', col_size=col_label_size), end='')
         print()
-    print('═'*header_size)
+    print('└' + '─'*header_size + '┘')
+
+
+def print_results(versions, scenes, metrics):
+    names = [f.get_name() for f in versions]
+    for scene in scenes:
+        if type(scene) == Scene:
+            spps = set()
+            for v in versions:
+                results = v.get_results(scene)
+                v_spps = {r.spp for r in results}
+                spps |= v_spps
+        elif type(scene) == ConfigScene:
+            spps = scene.spps
+            scene = scene.scene
+
+        for metric in metrics:
+            data = [[None for y in spps] for x in versions]
+            spps_names = [str(spp) for spp in spps]
+            table_has_results = False
+            for row_i, v in enumerate(versions):
+                for col_i, spp in enumerate(spps):
+                    result = v.get_result(scene, spp)
+                    if result:
+                        data[row_i][col_i] = getattr(result, metric)
+                        table_has_results = True
+            if table_has_results:
+                print_table(scene.get_name(), ' ', metric, names, spps_names, data)
 
 
 def get_slots(results_dir):
@@ -608,3 +642,305 @@ def get_slots(results_dir):
                 )
     slots.sort(key=lambda x: x['ctime'], reverse=False)
     return slots, current_slot
+
+
+def scan_scenes(scenes_dir):
+    """Scan scenes folder for fbksd-scene.json files and builds a fbksd-scenes.json cache file."""
+
+    if not os.path.exists(scenes_dir):
+        print('ERROR: scenes folder doesn\'t exist.')
+        return
+    if not os.path.exists(os.path.join(scenes_dir, 'scenes-root.json')):
+        print('ERROR: \'scenes-root.json\' file not found in scenes folder.')
+        return
+
+    def append_scene(scene, scenes):
+        name = scene['name']
+        path = scene['path']
+        ref_img = scene['ref-img']
+        ref = ''
+        if 'ref' in scene:
+            ref = scene['ref']
+        scenes.append({'name': name, 'path':path, 'ref-img':ref_img, 'ref':ref})
+
+    scenes_root = []
+    with open(os.path.join(scenes_dir, 'scenes-root.json')) as f:
+        scenes_root = json.load(f)
+
+    data = []
+    for rendeder in scenes_root:
+        with cd(os.path.join(scenes_dir, rendeder['scenes-path'])):
+            scene_files = glob.glob('**/fbksd-scene.json', recursive=True)
+            scenes = []
+            for sf in scene_files:
+                with open(sf) as f:
+                    scene = json.load(f)
+                append_scene(scene, scenes)
+
+            scenes_files = glob.glob('**/fbksd-scenes.json', recursive=True)
+            for sf in scenes_files:
+                scenes_vec = []
+                with open(sf) as f:
+                    scenes_vec = json.load(f)
+                for scene in scenes_vec:
+                    append_scene(scene, scenes)
+
+            data.append({'renderer': rendeder['renderer'], 'scenes': scenes})
+
+    with open(os.path.join(scenes_dir, 'fbksd-scenes.json'), 'w') as ofile:
+        json.dump(data, ofile, indent=4)
+
+
+def load_saved_results(results_dir):
+    with open(os.path.join(results_dir, 'scenes.json')) as f:
+        scenes_dic = json.load(f)
+    with open(os.path.join(results_dir, 'filters.json')) as f:
+        filters_dic = json.load(f)
+    with open(os.path.join(results_dir, 'samplers.json')) as f:
+        samplers_dic = json.load(f)
+    with open(os.path.join(results_dir, 'results.json')) as f:
+        filters_results_dic = json.load(f)
+    with open(os.path.join(results_dir, 'samplers_results.json')) as f:
+        samplers_results_dic = json.load(f)
+
+    renderers = {}
+    scenes = {}
+    for s in scenes_dic.values():
+        scene = Scene()
+        scene.id = s['id']
+        scene.name = s['name']
+        if s['renderer'] in renderers:
+            scene.renderer = renderers[s['renderer']]
+        else:
+            r = Renderer()
+            r.name = s['renderer']
+            renderers[s['renderer']] = r
+            scene.renderer = r
+        scenes[scene.id] = scene
+
+    filters = []
+    for f in filters_dic:
+        filt = Filter()
+        filt.id = f['id']
+        filt.name = f['name']
+        for v in f['versions']:
+            version = FilterVersion()
+            version.technique = filt
+            version.id = v['id']
+            version.tag = v['tag']
+            for rid in v['results_ids']:
+                r = filters_results_dic[str(rid)]
+                result = Result()
+                result.scene = scenes[r['scene_id']]
+                result.filter_version = version
+                result.spp = r['spp']
+                if result.spp not in result.scene.spps:
+                    result.scene.spps.append(result.spp)
+                result.exec_time = r['exec_time']
+                result.rendering_time = r['rendering_time']
+                result.mse = r['mse']
+                result.psnr = r['psnr']
+                result.ssim = r['ssim']
+                result.rmse = r['rmse']
+                result.aborte = r['aborted']
+                version.results.append(result)
+            filt.versions.append(version)
+            filters.append(version)
+
+    samplers = []
+    for f in samplers_dic:
+        filt = Sampler()
+        filt.id = f['id']
+        filt.name = f['name']
+        for v in f['versions']:
+            version = SamplerVersion()
+            version.technique = filt
+            version.id = v['id']
+            version.tag = v['tag']
+            for rid in v['results_ids']:
+                r = samplers_results_dic[rid]
+                result = SamplerResult()
+                result.sampler_version = version
+                result.scene = scenes[r['scene_id']]
+                result.spp = r['spp']
+                if result.spp not in result.scene.spps:
+                    result.scene.spps.append(result.spp)
+                result.exec_time = r['exec_time']
+                result.rendering_time = r['rendering_time']
+                result.mse = r['mse']
+                result.psnr = r['psnr']
+                result.ssim = r['ssim']
+                result.rmse = r['rmse']
+                result.aborte = r['aborted']
+                version.results.append(result)
+            filt.versions.append(version)
+            samplers.append(filt)
+
+    for s in scenes.values():
+        s.spps.sort()
+
+    return scenes, filters, samplers
+
+
+class Config:
+    config_file = ''
+    scenes = []
+    scenes_names = set()
+    filter_versions = []
+    sampler_versions = []
+
+    def __init__(self, config_file, all_scenes, all_filters, all_samplers):
+        with open(config_file) as f:
+            self.config_file = config_file
+            config = json.load(f)
+            for r in config['renderers']:
+                for s in r['scenes']:
+                    name = s['name']
+                    scene = all_scenes.get(name)
+                    if not scene:
+                        continue
+                    self.scenes.append(ConfigScene(scene, s['spps']))
+                    self.scenes_names.add(name)
+
+            for f in config['filters']:
+                name = f['name']
+                filt = all_filters.get(name)
+                if not filt:
+                    continue
+                if 'versions' in f:
+                    versions = f['versions']
+                else:
+                    versions = ['default']
+                for v in versions:
+                    version = filt.get_version(v)
+                    if not version:
+                        continue
+                    self.filter_versions.append(version)
+
+            for s in config['samplers']:
+                name = s['name']
+                sampler = all_samplers.get(name)
+                if not sampler:
+                    continue
+                if 'versions' in s:
+                    versions = s['versions']
+                else:
+                    versions = ['default']
+                for v in versions:
+                    version = sampler.get_version(v)
+                    if not version:
+                        continue
+                    self.sampler_versions.append(version)
+
+    def add_scene(self, scene, spps):
+        if scene.name not in self.scenes_names:
+            self.scenes.append(ConfigScene(scene, spps))
+            self.scenes_names.add(scene.name)
+
+    def remove_scene(self, scene):
+        if scene.name in self.scenes_names:
+            for i, s in enumerate(self.scenes):
+                if s.get_name() == scene.name:
+                    del self.scenes[i]
+                    self.scenes_names.remove(scene.name)
+                    return
+
+    def add_filter(self, version):
+        if version not in self.filter_versions:
+            self.filter_versions.append(version)
+
+    def remove_filter(self, version):
+        if version in self.filter_versions:
+            self.filter_versions.remove(version)
+
+    def add_sampler(self, version):
+        if version not in self.sampler_versions:
+            self.sampler_versions.append(version)
+
+    def remove_sampler(self, version):
+        if version in self.sampler_versions:
+            self.sampler_versions.remove(version)
+
+    def print(self):
+        if self.scenes:
+            print('Scenes')
+            print('{0:<5s}{1:<40s}{2:<10s}'.format('Id', 'Scene', 'spps'))
+            print('{0:75s}'.format('-'*75))
+            for scene in self.scenes:
+                print('{0:<5s}{1:<40s}{2:<10s}'.format(str(scene.scene.id), scene.get_name(), str(scene.spps)))
+            print('{0:75s}'.format('-'*75))
+
+        if self.filter_versions:
+            print('\nFilters')
+            print('{0:<5s}{1:<20s}{2:<10s}'.format('Id', 'Filter', 'Status'))
+            print('{0:75s}'.format('-'*75))
+            for v in self.filter_versions:
+                if v.tag == 'default':
+                    print('{0:<5s}{1:<20s}{2:<10s}'.format(str(v.id), v.technique.name, v.status))
+                else:
+                    print('{0:<5s}{1:<20s}{2:<10s}'.format(str(v.id), v.technique.name + '-{}'.format(v.tag), v.status))
+            print('{0:75s}'.format('-'*75))
+
+        if self.sampler_versions:
+            print('\nSamplers')
+            print('{0:<5s}{1:<20s}{2:<10s}'.format('Id', 'Sampler', 'Status'))
+            print('{0:75s}'.format('-'*75))
+            for v in self.sampler_versions:
+                if v.tag == 'default':
+                    print('{0:<5s}{1:<20s}{2:<10s}'.format(str(v.id), v.technique.name, v.status))
+                else:
+                    print('{0:<5s}{1:<20s}{2:<10s}'.format(str(v.id), v.technique.name + '-{}'.format(v.tag), v.status))
+            print('{0:75s}'.format('-'*75))
+
+    def save(self):
+        scenes_by_renderer = {}
+        for s in self.scenes:
+            if s.scene.renderer.name not in scenes_by_renderer:
+                scenes_by_renderer[s.scene.renderer.name] = [s]
+            else:
+                scenes_by_renderer[s.scene.renderer.name].append(s)
+
+        root_node = {}
+        renderers_array = []
+        for renderer in scenes_by_renderer:
+            renderer_node = {}
+            renderer_node['name'] = renderer
+            scenes_array = []
+            for scene in scenes_by_renderer[renderer]:
+                scene_node = {}
+                scene_node['name'] = scene.get_name()
+                scene_node['spps'] = scene.spps
+                scenes_array.append(scene_node)
+            renderer_node['scenes'] = scenes_array
+            renderers_array.append(renderer_node)
+        root_node['renderers'] = renderers_array
+
+        filters_dict = {}
+        for fv in self.filter_versions:
+            if fv.technique.name not in filters_dict:
+                filters_dict[fv.technique.name] = [fv.tag]
+            else:
+                filters_dict[fv.technique.name].append(fv.tag)
+        filters_array = []
+        for key, vers in filters_dict.items():
+            f_node = {}
+            f_node['name'] = key
+            f_node['versions'] = vers
+            filters_array.append(f_node)
+        root_node['filters'] = filters_array
+
+        samplers_dict = {}
+        for sv in self.sampler_versions:
+            if sv.technique.name not in samplers_dict:
+                samplers_dict[sv.technique.name] = [sv.tag]
+            else:
+                samplers_dict[sv.technique.name].append(sv.tag)
+        samplers_array = []
+        for key, vers in samplers_dict.items():
+            s_node = {}
+            s_node['name'] = key
+            s_node['versions'] = vers
+            samplers_array.append(s_node)
+        root_node['samplers'] = samplers_array
+        with open(self.config_file, 'w') as outfile:
+            json.dump(root_node, outfile, indent=4)

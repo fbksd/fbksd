@@ -45,8 +45,8 @@ bool sanitizeArgs(const QStringList& inputFiles, const QStringList& outputFolder
 int main(int argc, char *argv[])
 {
     QCoreApplication app(argc, argv);
-    QCoreApplication::setApplicationName("Benchmark core application");
-    QCoreApplication::setApplicationVersion("0.1");
+    QCoreApplication::setApplicationName("fbksd core application");
+    QCoreApplication::setApplicationVersion("1.0");
 
     QCommandLineParser parser;
     parser.addHelpOption();

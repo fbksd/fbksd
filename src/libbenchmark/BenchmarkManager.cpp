@@ -87,8 +87,8 @@ void BenchmarkManager::runPassive(int spp)
     m_benchmarkServer->run(/*2226*/);
     m_renderClient = std::make_unique<RenderClient>(2227);
     m_currentSceneInfo = m_renderClient->getSceneInfo();
-    m_currentSceneInfo.set("max_spp", spp);
-    m_currentSceneInfo.set("max_samples", spp * getPixelCount(m_currentSceneInfo));
+    m_currentSceneInfo.set<int64_t>("max_spp", spp);
+    m_currentSceneInfo.set<int64_t>("max_samples", spp * getPixelCount(m_currentSceneInfo));
     allocateResultShm(getPixelCount(m_currentSceneInfo));
     m_currentSampleBudget = getInitSampleBudget(m_currentSceneInfo);
     m_currentExecTime = 0;
@@ -119,8 +119,8 @@ void BenchmarkManager::runScene(const QString& rendererPath,
     m_currentSceneInfo = m_renderClient->getSceneInfo();
     if(spp)
     {
-        m_currentSceneInfo.set("max_spp", spp);
-        m_currentSceneInfo.set("max_samples", spp * getPixelCount(m_currentSceneInfo));
+        m_currentSceneInfo.set<int64_t>("max_spp", spp);
+        m_currentSceneInfo.set<int64_t>("max_samples", spp * getPixelCount(m_currentSceneInfo));
     }
     allocateResultShm(getPixelCount(m_currentSceneInfo));
 

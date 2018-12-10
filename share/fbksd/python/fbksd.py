@@ -1,5 +1,12 @@
 #!/usr/bin/env python3
 
+# Copyright (c) 2018 Jonas Deyson
+#
+# This software is released under the MIT License.
+#
+# You should have received a copy of the MIT License
+# along with this program. If not, see <https://opensource.org/licenses/MIT>
+
 import argparse
 from argparse import RawTextHelpFormatter
 import os.path
@@ -11,12 +18,13 @@ import itertools
 import time
 import http.server
 import socketserver
+# local imports
+from fbksd.common import *
 
 
 #=============================================
 #                Common paths                #
 #=============================================
-install_prefix_dir = '@INSTALL_PREFIX@'
 scenes_dir         = os.path.join(os.getcwd(), 'scenes')
 renderers_dir      = os.path.join(os.getcwd(), 'renderers')
 denoisers_dir      = os.path.join(os.getcwd(), 'denoisers')
@@ -26,10 +34,9 @@ current_config     = os.path.join(configs_dir, '.current.json')
 page_dir           = os.path.join(os.getcwd(), '.page')
 results_dir        = os.path.join(os.getcwd(), 'results')
 current_slot_dir   = os.path.join(results_dir, '.current')
-scenes_profile     = os.path.join(scenes_dir, 'scenes.xml')
-
-sys.path.append(os.path.join(install_prefix_dir, 'share/fbksd/python'))
-from fbksd import *
+scenes_file        = os.path.join(scenes_dir, 'fbksd-scenes.json')
+install_prefix_dir = os.getenv('FBKSD_INSTALL_DIR',
+    os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir)))
 
 
 #=============================================
@@ -54,7 +61,7 @@ g_samplers_results_loaded = False
 
 def load_scenes_g():
     global g_scenes, g_scenes_names, g_renderers
-    g_scenes, g_scenes_names, g_renderers = load_scenes(scenes_profile)
+    g_scenes, g_scenes_names, g_renderers = load_scenes(scenes_file, renderers_dir)
 
 
 def load_filters_g():
@@ -82,11 +89,11 @@ def save_scenes_file_g(scenes_ids):
 
 
 def save_filters_file_g(scenes_ids, filters_ids):
-    save_techniques_file(scenes_ids, scenes_ids, g_filters, os.path.join(current_slot_dir, 'filters.json'))
+    save_techniques_file(scenes_ids, filters_ids, g_filters, os.path.join(current_slot_dir, 'filters.json'))
 
 
 def save_samplers_file_g(scenes_ids, samplers_ids):
-    save_techniques_file(scenes_ids, scenes_ids, g_samplers, os.path.join(current_slot_dir, 'samplers.json'))
+    save_techniques_file(scenes_ids, samplers_ids, g_samplers, os.path.join(current_slot_dir, 'samplers.json'))
 
 
 def save_results_file_g(scenes_ids, filters_ids):
@@ -135,6 +142,10 @@ def cmd_init(args):
 
 def cmd_config(args):
     configs, current = get_configs(configs_dir, current_config)
+    if not configs:
+        print('No configuration found.')
+        return
+
     print('{0}{1:<4s}{2:<16}{3:<20s}'.format(' ', 'Id', 'Creation Date', 'Name'))
     print('{0:75s}'.format('-'*75))
     for i, config in enumerate(configs):
@@ -207,7 +218,7 @@ def cmd_config_select(args):
 
 
 def cmd_config_show(args):
-    if args.id:
+    if args.id is not None:
         configs, current = get_configs(configs_dir, current_config)
         if args.id < 1 or args.id > len(configs):
             print('ERROR: Invalid config ID.')
@@ -216,9 +227,155 @@ def cmd_config_show(args):
     else:
         config_file = current_config
 
-    with open(config_file) as f:
-        config = json.load(f)
-        print(json.dumps(config, indent=4, sort_keys=True))
+    if not os.path.exists(config_file):
+        print('Configuration not found.')
+        return
+
+    load_scenes_g()
+    load_filters_g()
+    load_samplers_g()
+    config = Config(current_config, g_scenes_names, g_filters_names, g_samplers_names)
+    config.print()
+
+    # with open(config_file) as f:
+    #     config = json.load(f)
+    #     print(json.dumps(config, indent=4, sort_keys=True))
+
+
+def cmd_config_add_scenes(args):
+    load_scenes_g()
+    load_filters_g()
+    load_samplers_g()
+
+    scenes = []
+    if args.all:
+        scenes = g_scenes.values()
+    else:
+        scenes = scenesFromIds(args.scenes, g_scenes)
+
+    spps = list(set(args.spps))
+    spps.sort()
+
+    config = Config(current_config, g_scenes_names, g_filters_names, g_samplers_names)
+    for scene in scenes:
+        config.add_scene(scene, spps)
+    config.save()
+
+
+def cmd_config_remove_scenes(args):
+    load_scenes_g()
+    load_filters_g()
+    load_samplers_g()
+
+    scenes = scenesFromIds(args.scenes, g_scenes)
+    config = Config(current_config, g_scenes_names, g_filters_names, g_samplers_names)
+    for scene in scenes:
+        config.remove_scene(scene)
+    config.save()
+
+
+def cmd_config_add_filters(args):
+    load_scenes_g()
+    load_filters_g()
+    load_samplers_g()
+
+    filters = []
+    if args.all:
+        filters = g_filters_versions.values()
+    else:
+        filters = techniqueVersionsFromIds(args.filters, g_filters_versions)
+
+    config = Config(current_config, g_scenes_names, g_filters_names, g_samplers_names)
+    for f in filters:
+        config.add_filter(f)
+    config.save()
+
+
+def cmd_config_remove_filters(args):
+    load_scenes_g()
+    load_filters_g()
+    load_samplers_g()
+
+    filters = techniqueVersionsFromIds(args.filters, g_filters_versions)
+    config = Config(current_config, g_scenes_names, g_filters_names, g_samplers_names)
+    for f in filters:
+        config.remove_filter(f)
+    config.save()
+
+
+def cmd_config_add_samplers(args):
+    load_scenes_g()
+    load_filters_g()
+    load_samplers_g()
+
+    samplers = []
+    if args.all:
+        samplers = g_samplers_versions.values()
+    else:
+        samplers = techniqueVersionsFromIds(args.samplers, g_samplers_versions)
+
+    config = Config(current_config, g_scenes_names, g_filters_names, g_samplers_names)
+    for s in samplers:
+        config.add_sampler(s)
+    config.save()
+
+
+def cmd_config_remove_samplers(args):
+    load_scenes_g()
+    load_filters_g()
+    load_samplers_g()
+
+    samplers = techniqueVersionsFromIds(args.samplers, g_samplers_versions)
+    config = Config(current_config, g_scenes_names, g_filters_names, g_samplers_names)
+    for s in samplers:
+        config.remove_sampler(s)
+    config.save()
+
+
+def cmd_config_add_spps(args):
+    load_scenes_g()
+    load_filters_g()
+    load_samplers_g()
+
+    spps = set(args.spps)
+
+    config = Config(current_config, g_scenes_names, g_filters_names, g_samplers_names)
+    config_scenes = []
+    if args.scenes:
+        scenes = scenesFromIds(args.scenes, g_scenes)
+        for s in config.scenes:
+            if s.scene in scenes:
+                config_scenes.append(s)
+    else:
+        config_scenes = config.scenes
+
+    for s in config_scenes:
+        s.spps = list(set(s.spps) | spps)
+        s.spps.sort()
+    config.save()
+
+
+def cmd_config_remove_spps(args):
+    load_scenes_g()
+    load_filters_g()
+    load_samplers_g()
+
+    spps = set(args.spps)
+
+    config = Config(current_config, g_scenes_names, g_filters_names, g_samplers_names)
+    config_scenes = []
+    if args.scenes:
+        scenes = scenesFromIds(args.scenes, g_scenes)
+        for s in config.scenes:
+            if s.scene in scenes:
+                config_scenes.append(s)
+    else:
+        config_scenes = config.scenes
+
+    for s in config_scenes:
+        s.spps = list(set(s.spps) - spps)
+        s.spps.sort()
+    config.save()
 
 
 def cmd_update(args):
@@ -229,8 +386,8 @@ def cmd_update(args):
     load_samplers_results_g()
 
     scenes_ids = g_scenes.keys()
-    filters_ids = g_filters.keys()
-    samplers_ids = g_samplers.keys()
+    filters_ids = g_filters_versions.keys()
+    samplers_ids = g_samplers_versions.keys()
 
     save_scenes_file_g(scenes_ids)
     save_filters_file_g(scenes_ids, filters_ids)
@@ -304,6 +461,9 @@ def cmd_scenes(args):
         if os.path.isdir(args.set):
             if os.path.islink(scenes_dir):
                 os.unlink(scenes_dir)
+            elif os.path.exists(scenes_dir):
+                print('ERROR: scenes folder already exists.')
+                return
             os.symlink(os.path.abspath(args.set), 'scenes')
             print('Scenes path set.\n')
             return
@@ -311,14 +471,32 @@ def cmd_scenes(args):
             print('ERROR: \"{}\" is not an existing directory.\n'.format(args.set))
             return
 
-    if not os.path.exists(scenes_profile):
+    needs_update = False
+    if not os.path.isdir(scenes_dir):
         print('ERROR: Scenes directory not set (see \"--set\" option).\n')
         return
+    elif not os.path.exists(scenes_file):
+        needs_update = True
+
+    if args.update or needs_update:
+        print('Updating scenes cache file...')
+        scan_scenes(scenes_dir)
+        print('Done.\n')
+
+    ready_only = args.ready
 
     load_scenes_g()
+    scenes = g_scenes
+    if ready_only:
+        scenes = {sid: g_scenes[sid] for sid in g_scenes.keys() if g_scenes[sid].renderer.is_ready}
+
+    if not scenes:
+        print('No scenes.')
+        return
+
     print('{0:<5s}{1:<50s}{2:<20s}'.format('Id', 'Name', 'Renderer'))
     print('{0:75s}'.format('-'*75))
-    for sid, scene in g_scenes.items():
+    for sid, scene in scenes.items():
         print('{0:<5s}{1:<50s}{2:<20s}'.format(str(sid), scene.name, scene.renderer.name))
     print('{0:75s}'.format('-'*75))
 
@@ -334,7 +512,7 @@ def cmd_run(args):
     config = writeTempConfig(config_filename, current_config, renderers_dir, g_renderers, scenes_dir, g_scenes_names)
     if not config:
         print('Nothing to run.')
-    print('Running configuration \'' + currentConfigName(current_config) + '\'\n')
+    print('Running configuration \'' + current_config_name(current_config) + '\'\n')
 
     benchmark_exec = os.path.join(install_prefix_dir, 'bin/fbksd-benchmark')
     run_techniques(
@@ -389,9 +567,8 @@ def cmd_results_show(args):
     load_scenes_g()
     load_filters_g()
     load_results_g()
-    filters = techniqueVersionsFromIds(args.filters, g_filters_versions)
-    if not filters:
-        return
+    load_samplers_g()
+    load_samplers_results_g()
 
     metrics = []
     if args.mse:
@@ -400,23 +577,29 @@ def cmd_results_show(args):
         metrics.append('psnr')
     if args.ssim:
         metrics.append('ssim')
+    if args.rmse:
+        metrics.append('rmse')
     if not metrics:
-        metrics = ['mse', 'psnr', 'ssim']
+        metrics = ['mse', 'psnr', 'ssim', 'rmse']
 
-    filters_names = [f.get_name() for f in filters]
-    for scene in list(g_scenes.values()):
-        for metric in metrics:
-            data = [[None for y in scene.spps] for x in filters]
-            spps_names = [str(spp) for spp in scene.spps]
-            table_has_results = False
-            for row_i, v in enumerate(filters):
-                for col_i, spp in enumerate(scene.spps):
-                    result = v.get_result(scene, spp)
-                    if result:
-                        data[row_i][col_i] = getattr(result, metric)
-                        table_has_results = True
-            if table_has_results:
-                print_table(scene.name, ' ', metric, filters_names, spps_names, data)
+    config = Config(current_config, g_scenes_names, g_filters_names, g_samplers_names)
+    scenes = config.scenes
+    if args.scenes_all:
+        scenes = g_scenes.values()
+
+    filters = config.filter_versions
+    if args.filters_all:
+        filters = g_filters_versions.values()
+    if filters:
+        print('DENOISERS')
+    print_results(filters, scenes, metrics)
+
+    samplers = config.sampler_versions
+    if args.samplers_all:
+        samplers = g_samplers_versions.values()
+    if samplers:
+        print('SAMPLERS')
+    print_results(samplers, scenes, metrics)
 
 
 def cmd_results_rank(args):
@@ -558,7 +741,6 @@ def cmd_export_page(args):
                     ignore=shutil.ignore_patterns('*.exr', '*.log', '*.txt', '*.py', 'bad_imgs', 'partials', 'bad_partials'))
 
 
-
 def cmd_slots(args):
     slots, current_slot = get_slots(results_dir)
     print('{0}{1:<4s}{2:<16}{3:<20s}'.format(' ', 'Id', 'Creation Date', 'Name'))
@@ -629,15 +811,15 @@ def cmd_serve(args):
 #=============================================
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(prog='fbksd', description='fbksd system cli interface.')
-    subparsers = parser.add_subparsers(title='subcommands', description='\n  Test description')
+    subparsers = parser.add_subparsers(title='subcommands')
 
     # init
     parserInit = subparsers.add_parser('init', formatter_class=RawTextHelpFormatter,
         help='Creates an empty workspace in the current directory.',
         description=
-            'This is a test description for the cofig comand.\n\n'
-            'This is command is fucking awsome.'
-    )
+            'Creates an empty workspace in the current directory.\n\n'
+            'A workspace is the folder where all the renderers, techniques, and benchmarking data is kept.\n'
+            'You should always call \'fbksd\' having a workspace as working directory.')
     parserInit.add_argument('--slot-name', help='Name of the result slot (default: \"Results 1\")')
     parserInit.add_argument('--scenes-dir', help='Path to a scenes folder. A link to that folder is created in the current directory.')
     parserInit.set_defaults(func=cmd_init)
@@ -647,14 +829,19 @@ if __name__ == "__main__":
         help="Manage configurations.",
         description=
             'A configuration is a set of techniques and scenes to be executed. Each technique will be executed\n'
-            'for each scene with a range of sampler-per-pixel (spp), which can also be configured.\n'
-            'Subsequent commands like \'run\', \'results\', etc. will act on the current configuration.'
-    )
+            'for each scene with a set of samples-per-pixel (spp), which can also be configured.\n'
+            'Subsequent commands like \'run\', \'results\', etc. will act on the current configuration.\n\n'
+            'Each configuration has a corresponding file in the \'configs\' folder. You can edit them directly.')
     parserConfig.set_defaults(func=cmd_config)
     configSubparsers = parserConfig.add_subparsers(title='subcommands')
-    # config new
-    parserConfigNew = configSubparsers.add_parser('new', help='Creates and selects a new configuration.')
-    parserConfigNew.add_argument('name', metavar='NAME', help='Configuration name')
+    ## config new
+    parserConfigNew = configSubparsers.add_parser('new', formatter_class=RawTextHelpFormatter,
+         help='Creates and selects a new configuration.',
+         description=
+            'Creates and selects a new configuration with the given name, containing the scenes, techniques,\n'
+            'and spps, provided using the corresponding arguments.\n\n'
+            'The config name \'all\' is reserved, and can be used to always run all available scenes and techniques.')
+    parserConfigNew.add_argument('name', metavar='NAME', help='Configuration name.')
     parserConfigNew.add_argument('--scenes', nargs='+', type=int, metavar='SCENE_ID', help='Scenes to be included.')
     parserConfigNew.add_argument('--scenes-all', action='store_true', help='Include all scenes.')
     parserConfigNew.add_argument('--filters', nargs='+', type=int, metavar='FILTER_ID', help='Filters to be included.')
@@ -663,22 +850,87 @@ if __name__ == "__main__":
     parserConfigNew.add_argument('--samplers-all', action='store_true', help='Include all samplers.')
     parserConfigNew.add_argument('--spps', metavar='SPP', type=int, nargs='+', help='List of spps to use.')
     parserConfigNew.set_defaults(func=cmd_config_new)
-    # config select
-    parserConfigSelect = configSubparsers.add_parser('select', help='Select a configuration.')
+    ## config select
+    parserConfigSelect = configSubparsers.add_parser('select', formatter_class=RawTextHelpFormatter,
+        help='Select a configuration.',
+        description=
+            'Select a configuration given its ID.\n\n'
+            'The selected configuration is used by subsequent commands like \'run\' and \'results\'.')
     parserConfigSelect.add_argument('id', type=int, metavar='CONFIG_ID', help='Id of the desired configuration.')
     parserConfigSelect.set_defaults(func=cmd_config_select)
-    # config show
-    parserConfigShow = configSubparsers.add_parser('show', help='Show configuration details.')
+    ## config show
+    parserConfigShow = configSubparsers.add_parser('show', formatter_class=RawTextHelpFormatter,
+        help='Show configuration details.',
+        description=
+            'Show the contents of a configuration\'s config file. If no ID is given, the current config is shown.')
     parserConfigShow.add_argument('--id', type=int, metavar='CONFIG_ID', help='Id of the desired configuration.')
     parserConfigShow.set_defaults(func=cmd_config_show)
-
-    # update
-    parserUpdate = subparsers.add_parser('update', help='update data shown on the results page.')
-    parserUpdate.set_defaults(func=cmd_update)
+    ## config add-scenes
+    parserConfigAddScenes = configSubparsers.add_parser('add-scenes', formatter_class=RawTextHelpFormatter,
+         help='Add scenes to the current config.',
+         description='Add scenes to the current config.')
+    parserConfigAddScenes.add_argument('scenes', nargs='*', type=int, metavar='SCENE_ID', help='Scene ID.')
+    parserConfigAddScenes.add_argument('--spps', metavar='SPP', type=int, nargs='+', required=True, help='spps used for the added scenes.')
+    parserConfigAddScenes.add_argument('--all', action='store_true', help='Add all available scenes.')
+    parserConfigAddScenes.set_defaults(func=cmd_config_add_scenes)
+    ## config rm-scenes
+    parserConfigRemoveScenes = configSubparsers.add_parser('rm-scenes', formatter_class=RawTextHelpFormatter,
+         help='Remove scenes from the current config.',
+         description='Remove scenes from the current config.')
+    parserConfigRemoveScenes.add_argument('scenes', nargs='+', type=int, metavar='SCENE_ID', help='Scene ID.')
+    parserConfigRemoveScenes.set_defaults(func=cmd_config_remove_scenes)
+    ## config add-filters
+    parserConfigAddFilters = configSubparsers.add_parser('add-filters', formatter_class=RawTextHelpFormatter,
+         help='Add filters to the current config.',
+         description='Add filters to the current config.')
+    parserConfigAddFilters.add_argument('filters', nargs='*', type=int, metavar='FILTER_ID', help='Filter ID.')
+    parserConfigAddFilters.add_argument('--all', action='store_true', help='Add all available filters.')
+    parserConfigAddFilters.set_defaults(func=cmd_config_add_filters)
+    ## config rm-filters
+    parserConfigRemoveFilters = configSubparsers.add_parser('rm-filters', formatter_class=RawTextHelpFormatter,
+         help='Remove filters from the current config.',
+         description='Remove filters from the current config.')
+    parserConfigRemoveFilters.add_argument('filters', nargs='+', type=int, metavar='FILTER_ID', help='Filter ID.')
+    parserConfigRemoveFilters.set_defaults(func=cmd_config_remove_filters)
+    ## config add-samplers
+    parserConfigAddSamplers = configSubparsers.add_parser('add-samplers', formatter_class=RawTextHelpFormatter,
+         help='Add samplers to the current config.',
+         description='Add samplers to the current config.')
+    parserConfigAddSamplers.add_argument('samplers', nargs='*', type=int, metavar='FILTER_ID', help='Sampler ID.')
+    parserConfigAddSamplers.add_argument('--all', action='store_true', help='Add all available samplers.')
+    parserConfigAddSamplers.set_defaults(func=cmd_config_add_samplers)
+    ## config rm-samplers
+    parserConfigRemoveSamplers = configSubparsers.add_parser('rm-samplers', formatter_class=RawTextHelpFormatter,
+         help='Remove samplers from the current config.',
+         description='Remove samplers from the current config.')
+    parserConfigRemoveSamplers.add_argument('samplers', nargs='+', type=int, metavar='FILTER_ID', help='Sampler ID.')
+    parserConfigRemoveSamplers.set_defaults(func=cmd_config_remove_samplers)
+    ## config add-spps
+    parserConfigAddSpps = configSubparsers.add_parser('add-spps', formatter_class=RawTextHelpFormatter,
+         help='Add spps to the current config.',
+         description=
+            'Add spps to the current config.\n\n'
+            'By default, the spps are added to all scenes in the config. You can add to specific scenes using\n'
+            'the \'--scenes\' option.')
+    parserConfigAddSpps.add_argument('spps', nargs='+', type=int, metavar='SPP', help='spp value.')
+    parserConfigAddSpps.add_argument('--scenes', metavar='SCENE_ID', type=int, nargs='+',
+        help='Add the spps to specific scenes.')
+    parserConfigAddSpps.set_defaults(func=cmd_config_add_spps)
+    ## config rm-spps
+    parserConfigRemoveSpps = configSubparsers.add_parser('rm-spps', formatter_class=RawTextHelpFormatter,
+         help='Remove spps from the current config.',
+         description=
+            'Remove spps from the current config.\n\n'
+            'By default, the spps are removed from all scenes in the config. You can remove from specific scenes using\n'
+            'the \'--scenes\' option.')
+    parserConfigRemoveSpps.add_argument('spps', nargs='+', type=int, metavar='SCENE_ID', help='spps.')
+    parserConfigRemoveSpps.add_argument('--scenes', metavar='SCENE_ID', type=int, nargs='+',
+        help='Remove the spps from specific scenes.')
+    parserConfigRemoveSpps.set_defaults(func=cmd_config_remove_spps)
 
     # filters
     parserFilters = subparsers.add_parser('filters', formatter_class=RawTextHelpFormatter,
-        help='list all filters', description='List all filters')
+        help='List all filters.', description='List all filters.')
     parserFilters.set_defaults(func=cmd_filters)
 
     # samplers
@@ -686,87 +938,99 @@ if __name__ == "__main__":
     parserSamplers.set_defaults(func=cmd_samplers)
 
     # scenes
-    parserScenes = subparsers.add_parser('scenes', help='list all scenes')
-    parserScenes.add_argument('--set', metavar='SCENES_DIR', help='Sets the scenes directory.')
+    parserScenes = subparsers.add_parser('scenes', formatter_class=RawTextHelpFormatter,
+        help='Manage the scenes cache.',
+        description=
+            'Without options, this command list all scenes.\n\n'
+            'The scenes are read from the \'scenes/fbksd-scenes.json\' cache file. This file is generated automatically,\n'
+            'by scanning the \'scenes\' folder. You can update the cache using the \'--update\' option.\n\n'
+            'If you keep you scenes folder somewhere else, you can create a link for it in the workspace using the\n'
+             '\'--set\' option.')
+    parserScenes.add_argument('--set', metavar='SCENES_DIR', help='Create/change the \'scenes\' link to the given scenes folder.')
+    parserScenes.add_argument('--update', action='store_true', help='Re-scan the scenes directory and re-generate the scenes cache file.')
+    parserScenes.add_argument('--ready', action='store_true', help='List only scenes from ready renderers.')
     parserScenes.set_defaults(func=cmd_scenes)
 
     # filter-info, sampler-info
-    parserFilterInfo = subparsers.add_parser('filter-info', help='shows details about a filter')
+    parserFilterInfo = subparsers.add_parser('filter-info', help='Shows details about a filter.')
     parserFilterInfo.add_argument('filters', metavar='FILTER_ID', type=int, nargs='+', help='Filter ID.')
     parserFilterInfo.set_defaults(func=cmd_filter_info)
-    parserSamplerInfo = subparsers.add_parser('sampler-info', help='shows details about a sampler')
-    parserSamplerInfo.add_argument('samplers', metavar='SAMPLER_ID', type=int, nargs='+', help='Sampler ID')
+    parserSamplerInfo = subparsers.add_parser('sampler-info', help='Shows details about a sampler.')
+    parserSamplerInfo.add_argument('samplers', metavar='SAMPLER_ID', type=int, nargs='+', help='Sampler ID.')
     parserSamplerInfo.set_defaults(func=cmd_sampler_info)
 
     # run
-    parserRun = subparsers.add_parser('run',
-        formatter_class=RawTextHelpFormatter,
+    parserRun = subparsers.add_parser('run', formatter_class=RawTextHelpFormatter,
         help='Run the benchmark with the current configuration.',
-        description=
-            'Run the benchmark with the current configuration.\n\n'
-            'To run filters, use the \"--filters\" option passing the ids of the desired filters.\n'
-            'If no id is passed, all filters are selected by default.\n'
-            'If the \"--filters\" option is not used, no filter is executed.\n'
-            'The same behaviour is valid for the \"--samplers\" option.\n\n'
-            'To specify the scenes, use the \"--scenes\" option passing the ids of the desired scenes.\n'
-            'If this option is not used, or if no id is given, all scenes are selected.\n')
+        description='Run the benchmark with the current configuration.')
     parserRun.set_defaults(func=cmd_run)
-    parserRun.add_argument('--overwrite', action='store_true', help='overwrite previous results.')
+    parserRun.add_argument('--overwrite', action='store_true', help='Overwrites previous results.')
 
     # results
-    parserResults = subparsers.add_parser('results', help='manipulate results')
+    parserResults = subparsers.add_parser('results', help='Manipulate results.')
     resultsSubparsers = parserResults.add_subparsers(title='results subcommands')
-    # results compute
-    parserResultsCompute = resultsSubparsers.add_parser('compute', help='compute errors for the results saved in the results folder')
-    parserResultsCompute.add_argument('--overwrite', action='store_true', dest='overwrite', help='overwrite previous results.')
+    ## results compute
+    parserResultsCompute = resultsSubparsers.add_parser('compute', help='Compute errors for the results saved in the results folder.')
+    parserResultsCompute.add_argument('--overwrite', action='store_true', dest='overwrite', help='Overwrite previous results.')
     parserResultsCompute.set_defaults(func=cmd_results_compute)
-    # results show
-    parserResultsShow = resultsSubparsers.add_parser('show', help='list results')
-    parserResultsShow.add_argument('filters', nargs='*', type=int, help='filters ids.')
-    parserResultsShow.add_argument('samplers', nargs='*', type=int, help='samplers ids.')
-    parserResultsShow.add_argument('--ssim', action='store_true', help='Shows ssim error.')
+    ## results show
+    parserResultsShow = resultsSubparsers.add_parser('show', formatter_class=RawTextHelpFormatter,
+        help='Show results.',
+        description=
+            'Show results.\n\n'
+            'By default, all errors metrics for the current config are shown. You can show results for all the techniques\n'
+            'in the workspace using the \'--{filters,samplers}-all\' options, and also specify individual error metrics.')
+    parserResultsShow.add_argument('--filters-all', action='store_true', help='Show all filters in the workspace.')
+    parserResultsShow.add_argument('--samplers-all', action='store_true', help='Show all samplers in the workspace.')
+    parserResultsShow.add_argument('--scenes-all', action='store_true', help='Show all scenes in the workspace.')
+    parserResultsShow.add_argument('--ssim', action='store_true', help='Show ssim error.')
     parserResultsShow.add_argument('--mse', action='store_true', help='Shows mse error.')
     parserResultsShow.add_argument('--psnr', action='store_true', help='Shows psnr error.')
+    parserResultsShow.add_argument('--rmse', action='store_true', help='Shows rmse error.')
     parserResultsShow.set_defaults(func=cmd_results_show)
-    # results rank
-    parserResultsRank = resultsSubparsers.add_parser('rank', help='show a table ranking the filters')
-    parserResultsRank.add_argument('--filters', nargs='+', type=int, metavar='FILTER_ID', help='filters ids (default: all)')
-    parserResultsRank.add_argument('--samplers', nargs='+', type=int, metavar='SAMPLER_ID', help='samplers ids (default: all)')
-    parserResultsRank.add_argument('--scenes', nargs='+', type=int, metavar='SCENE_ID', help='scenes ids (default: all)')
+    ## results rank
+    parserResultsRank = resultsSubparsers.add_parser('rank', help='show a table ranking the filters.')
+    parserResultsRank.add_argument('--filters', nargs='+', type=int, metavar='FILTER_ID', help='Filters ids (default: all).')
+    parserResultsRank.add_argument('--samplers', nargs='+', type=int, metavar='SAMPLER_ID', help='Samplers ids (default: all).')
+    parserResultsRank.add_argument('--scenes', nargs='+', type=int, metavar='SCENE_ID', help='Scenes ids (default: all).')
     parserResultsRank.add_argument('--ssim', action='store_true', help='Shows ssim error.')
     parserResultsRank.add_argument('--mse', action='store_true', help='Shows mse error.')
     parserResultsRank.add_argument('--psnr', action='store_true', help='Shows psnr error.')
     parserResultsRank.set_defaults(func=cmd_results_rank)
-    # result export-csv
-    parserResultsExportCSV = resultsSubparsers.add_parser('export-csv', help='Prints a CSV table with the errors')
-    parserResultsExportCSV.add_argument('--filters', nargs='+', type=int, metavar='FILTER_ID', help='filters ids (default: all)')
-    parserResultsExportCSV.add_argument('--samplers', nargs='+', type=int, metavar='SAMPLER_ID', help='samplers ids (default: all)')
-    parserResultsExportCSV.add_argument('--scenes', nargs='+', type=int, metavar='SCENE_ID', help='scenes ids (default: all)')
-    parserResultsExportCSV.add_argument('--spps', metavar='SPP', type=int, dest='spps', nargs='+', help='list of spps to use (overwrite the ones defines in the profile)')
-    parserResultsExportCSV.add_argument('--mse-scale', type=float, dest='mse_scale', help='Scale applyed to the mse values')
-    parserResultsExportCSV.add_argument('--rmse-scale', type=float, dest='rmse_scale', help='Scale applyed to the rmse values')
-    parserResultsExportCSV.add_argument('--metrics', nargs='+', metavar='METRIC', help='List of metrics to export. Is this option is not used, all metrics are exported. Supported metrics are: mse, psnr, rmse, ssim')
+    ## result export-csv
+    parserResultsExportCSV = resultsSubparsers.add_parser('export-csv', help='Prints a CSV table with the errors.')
+    parserResultsExportCSV.add_argument('--filters', nargs='+', type=int, metavar='FILTER_ID', help='Filters ids (default: all).')
+    parserResultsExportCSV.add_argument('--samplers', nargs='+', type=int, metavar='SAMPLER_ID', help='Samplers ids (default: all).')
+    parserResultsExportCSV.add_argument('--scenes', nargs='+', type=int, metavar='SCENE_ID', help='Scenes ids (default: all).')
+    parserResultsExportCSV.add_argument('--spps', metavar='SPP', type=int, dest='spps', nargs='+',
+        help='List of spps to use (overwrite the ones defines in the profile).')
+    parserResultsExportCSV.add_argument('--mse-scale', type=float, dest='mse_scale', help='Scale applyed to the mse values.')
+    parserResultsExportCSV.add_argument('--rmse-scale', type=float, dest='rmse_scale', help='Scale applyed to the rmse values.')
+    parserResultsExportCSV.add_argument('--metrics', nargs='+', metavar='METRIC',
+        help='List of metrics to export. Is this option is not used, all metrics are exported. Supported metrics are: mse, psnr, rmse, ssim.')
     parserResultsExportCSV.set_defaults(func=cmd_results_export_csv)
-    # results export
-    parserResultsExport = resultsSubparsers.add_parser(
-        'export',
+    ## results export
+    parserResultsExport = resultsSubparsers.add_parser('export',
         help='Export results and reference images. This is usefull to view results in a different results page.'
     )
     parserResultsExport.add_argument('dest', metavar='DEST', help='Destination folder.')
     parserResultsExport.add_argument('--overwrite', action='store_true', help='Overwrites DEST if it already exists.')
     parserResultsExport.set_defaults(func=cmd_export_page)
+    ## results update
+    parserResultsUpdate = resultsSubparsers.add_parser('update', help='Update the data shown on the results page.')
+    parserResultsUpdate.set_defaults(func=cmd_update)
 
     # slots
-    parserSlots = subparsers.add_parser('slots', help='manage result slots')
+    parserSlots = subparsers.add_parser('slots', help='Manage result slots.')
     parserSlots.set_defaults(func=cmd_slots)
     slotsSubparsers = parserSlots.add_subparsers(title='slots subcommands')
-    # slots new
+    ## slots new
     parserSlotsNew = slotsSubparsers.add_parser('new', help='Create (and select) a new slot.')
-    parserSlotsNew.add_argument('name', metavar='NAME', help='new slot name')
+    parserSlotsNew.add_argument('name', metavar='NAME', help='New slot name.')
     parserSlotsNew.set_defaults(func=cmd_slots_new)
-    # slots select
+    ## slots select
     parserSlotsSelect = slotsSubparsers.add_parser('select', help='Select another slot.')
-    parserSlotsSelect.add_argument('id', type=int, metavar='SLOT_ID', help='Id of the desired slot')
+    parserSlotsSelect.add_argument('id', type=int, metavar='SLOT_ID', help='Id of the desired slot.')
     parserSlotsSelect.set_defaults(func=cmd_slots_select)
 
     # serve

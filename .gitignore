@@ -1,6 +1,9 @@
 # tmp files
 *~
 CMakeLists.txt.user*
+*.vscode
 
 # Doxygen build folder:
 doxygen
+
+*__pycache__

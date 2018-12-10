@@ -1,3 +1,10 @@
+# Copyright (c) 2018 Jonas Deyson
+#
+# This software is released under the MIT License.
+#
+# You should have received a copy of the MIT License
+# along with this program. If not, see <https://opensource.org/licenses/MIT>
+
 import uuid
 
 class BaseModel():
@@ -14,6 +21,12 @@ class Technique(BaseModel):
         self.comment = ''
         self.citation = ''
         self.versions = []
+
+    def get_version(self, tag):
+        for v in self.versions:
+            if v.tag == tag:
+                return v 
+        return None
 
 
 class Filter(Technique):
@@ -88,6 +101,7 @@ class Renderer(BaseModel):
 
         self.name = ''
         self.path = ''
+        self.is_ready = False
         self.scenes = [] # Scene[]
 
 
@@ -107,8 +121,19 @@ class Scene(BaseModel):
         self.glossy_w = 0.0 # glossy
         self.gi_w = 0.0 # global illumination
         self.renderer = None # Renderer
-        self.spps = []
         self.regions = [] # ImageRegion
+
+    def get_name(self):
+        return self.name
+
+
+class ConfigScene:
+    def __init__(self, scene, spps):
+        self.scene = scene
+        self.spps = spps
+
+    def get_name(self):
+        return self.scene.name
 
 
 class ImageRegion(BaseModel):
