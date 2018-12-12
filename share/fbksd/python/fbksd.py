@@ -60,48 +60,59 @@ g_samplers_results_loaded = False
 
 
 def load_scenes_g():
-    global g_scenes, g_scenes_names, g_renderers
-    g_scenes, g_scenes_names, g_renderers = load_scenes(scenes_file, renderers_dir)
+    global g_scenes, g_scenes_names, g_renderers, g_scenes_loaded
+    if not g_scenes_loaded:
+        g_scenes, g_scenes_names, g_renderers = load_scenes(scenes_file, renderers_dir)
+        g_scenes_loaded = True
+
 
 
 def load_filters_g():
-    global g_filters, g_filters_names, g_filters_versions
-    g_filters, g_filters_names, g_filters_versions = load_filters(denoisers_dir)
+    global g_filters, g_filters_names, g_filters_versions, g_filters_loaded
+    if not g_filters_loaded:
+        g_filters, g_filters_names, g_filters_versions = load_filters(denoisers_dir)
+        g_filters_loaded = True
 
 
 def load_samplers_g():
-    global g_samplers, g_samplers_names, g_samplers_versions
-    g_samplers, g_samplers_names, g_samplers_versions = load_samplers(samplers_dir)
+    global g_samplers, g_samplers_names, g_samplers_versions, g_samplers_loaded
+    if not g_samplers_loaded:
+        g_samplers, g_samplers_names, g_samplers_versions = load_samplers(samplers_dir)
+        g_samplers_loaded = True
 
 
 def load_results_g():
-    global g_filters, g_scenes
-    load_filters_results(g_filters, g_scenes, current_slot_dir)
+    global g_filters, g_scenes, g_results_loaded
+    if not g_results_loaded:
+        load_filters_results(g_filters, g_scenes, current_slot_dir)
+        g_results_loaded = True
 
 
 def load_samplers_results_g():
-    global g_samplers, g_scenes
-    load_samplers_results(g_samplers, g_scenes, current_slot_dir)
+    global g_samplers, g_scenes, g_samplers_results_loaded
+    if not g_samplers_results_loaded:
+        load_samplers_results(g_samplers, g_scenes, current_slot_dir)
+        g_samplers_results_loaded = True
 
 
-def save_scenes_file_g(scenes_ids):
-    save_scenes_file(scenes_ids, g_scenes, current_slot_dir)
+def save_scenes_file_g(scenes):
+    save_scenes_file(scenes, current_slot_dir)
 
 
-def save_filters_file_g(scenes_ids, filters_ids):
-    save_techniques_file(scenes_ids, filters_ids, g_filters, os.path.join(current_slot_dir, 'filters.json'))
+def save_filters_file_g(scenes, filters_ids):
+    save_techniques_file(scenes, filters_ids, g_filters, os.path.join(current_slot_dir, 'filters.json'))
 
 
-def save_samplers_file_g(scenes_ids, samplers_ids):
-    save_techniques_file(scenes_ids, samplers_ids, g_samplers, os.path.join(current_slot_dir, 'samplers.json'))
+def save_samplers_file_g(scenes, samplers_ids):
+    save_techniques_file(scenes, samplers_ids, g_samplers, os.path.join(current_slot_dir, 'samplers.json'))
 
 
-def save_results_file_g(scenes_ids, filters_ids):
-    save_filters_result_file(current_slot_dir, scenes_ids, g_filters, filters_ids)
+def save_results_file_g(scenes, filters_ids):
+    save_filters_result_file(current_slot_dir, scenes, g_filters, filters_ids)
 
 
-def save_samplers_results_file_g(scenes_ids, samplers_ids):
-    save_samplers_result_file(current_slot_dir, scenes_ids, g_samplers, samplers_ids)
+def save_samplers_results_file_g(scenes, samplers_ids):
+    save_samplers_result_file(current_slot_dir, scenes, g_samplers, samplers_ids)
 
 
 #=============================================
@@ -199,9 +210,10 @@ def cmd_config_new(args):
     with open(new_config_file, 'w') as outfile:
         json.dump(root_node, outfile, indent=4)
 
-    if os.path.islink(current_config):
-        os.unlink(current_config)
-    os.symlink(args.name + '.json', current_config)
+    if args.select:
+        if os.path.islink(current_config):
+            os.unlink(current_config)
+        os.symlink(args.name + '.json', current_config)
 
 
 def cmd_config_select(args):
@@ -243,6 +255,10 @@ def cmd_config_show(args):
 
 
 def cmd_config_add_scenes(args):
+    if not os.path.exists(current_config):
+        print("ERROR: No current configuration.")
+        return
+
     load_scenes_g()
     load_filters_g()
     load_samplers_g()
@@ -263,6 +279,10 @@ def cmd_config_add_scenes(args):
 
 
 def cmd_config_remove_scenes(args):
+    if not os.path.exists(current_config):
+        print("ERROR: No current configuration.")
+        return
+
     load_scenes_g()
     load_filters_g()
     load_samplers_g()
@@ -275,6 +295,10 @@ def cmd_config_remove_scenes(args):
 
 
 def cmd_config_add_filters(args):
+    if not os.path.exists(current_config):
+        print("ERROR: No current configuration.")
+        return
+
     load_scenes_g()
     load_filters_g()
     load_samplers_g()
@@ -292,6 +316,10 @@ def cmd_config_add_filters(args):
 
 
 def cmd_config_remove_filters(args):
+    if not os.path.exists(current_config):
+        print("ERROR: No current configuration.")
+        return
+
     load_scenes_g()
     load_filters_g()
     load_samplers_g()
@@ -304,6 +332,10 @@ def cmd_config_remove_filters(args):
 
 
 def cmd_config_add_samplers(args):
+    if not os.path.exists(current_config):
+        print("ERROR: No current configuration.")
+        return
+
     load_scenes_g()
     load_filters_g()
     load_samplers_g()
@@ -321,6 +353,10 @@ def cmd_config_add_samplers(args):
 
 
 def cmd_config_remove_samplers(args):
+    if not os.path.exists(current_config):
+        print("ERROR: No current configuration.")
+        return
+
     load_scenes_g()
     load_filters_g()
     load_samplers_g()
@@ -333,6 +369,10 @@ def cmd_config_remove_samplers(args):
 
 
 def cmd_config_add_spps(args):
+    if not os.path.exists(current_config):
+        print("ERROR: No current configuration.")
+        return
+
     load_scenes_g()
     load_filters_g()
     load_samplers_g()
@@ -356,6 +396,10 @@ def cmd_config_add_spps(args):
 
 
 def cmd_config_remove_spps(args):
+    if not os.path.exists(current_config):
+        print("ERROR: No current configuration.")
+        return
+
     load_scenes_g()
     load_filters_g()
     load_samplers_g()
@@ -378,22 +422,35 @@ def cmd_config_remove_spps(args):
     config.save()
 
 
-def cmd_update(args):
+def cmd_results_update(args):
+    if not os.path.exists(current_slot_dir):
+        print("ERROR: No current slot.")
+        return
+
     load_scenes_g()
     load_filters_g()
     load_samplers_g()
     load_results_g()
     load_samplers_results_g()
 
-    scenes_ids = g_scenes.keys()
-    filters_ids = g_filters_versions.keys()
-    samplers_ids = g_samplers_versions.keys()
+    if args.all:
+        scenes = g_scenes
+        filters_ids = g_filters_versions.keys()
+        samplers_ids = g_samplers_versions.keys()
+    else:
+        if not os.path.exists(current_config):
+            print("ERROR: No current configuration.")
+            return
+        config = Config(current_config, g_scenes_names, g_filters_names, g_samplers_names)
+        scenes = {s.scene.id : s for s in config.scenes}
+        filters_ids = [v.id for v in config.filter_versions]
+        samplers_ids = [v.id for v in config.sampler_versions]
 
-    save_scenes_file_g(scenes_ids)
-    save_filters_file_g(scenes_ids, filters_ids)
-    save_samplers_file_g(scenes_ids, samplers_ids)
-    save_results_file_g(scenes_ids, filters_ids)
-    save_samplers_results_file_g(scenes_ids, samplers_ids)
+    save_scenes_file_g(scenes)
+    save_filters_file_g(scenes, filters_ids)
+    save_samplers_file_g(scenes, samplers_ids)
+    save_results_file_g(scenes, filters_ids)
+    save_samplers_results_file_g(scenes, samplers_ids)
 
 
 def cmd_filters(args):
@@ -504,6 +561,10 @@ def cmd_scenes(args):
 def cmd_run(args):
     if not os.path.exists(current_config):
         print("ERROR: No current configuration.")
+        return
+    if not os.path.exists(current_slot_dir):
+        print("ERROR: No current slot.")
+        return
 
     load_scenes_g()
     load_filters_g()
@@ -539,14 +600,37 @@ def cmd_run(args):
 # computes errors for each result image and saves a corresponding log file for each one.
 # overwrite logs that are older then the corresponding result images
 def cmd_results_compute(args):
+    if not os.path.exists(current_slot_dir):
+        print("ERROR: No current slot.")
+        return
+
     load_scenes_g()
+    load_filters_g()
+    load_samplers_g()
 
     compare_exec = os.path.join(install_prefix_dir, 'bin/fbksd-compare')
     exr2png_exec = os.path.join(install_prefix_dir, 'bin/fbksd-exr2png')
 
+    if args.all:
+        scenes = g_scenes_names
+        # NOTE: The compare_techniques_results function computes all results in the slot
+        # for the given scenes when the versions arg is empty.
+        filters = None
+        samplers = None
+    else:
+        if not os.path.exists(current_config):
+            print("ERROR: No current configuration.")
+            return
+        config = Config(current_config, g_scenes_names, g_filters_names, g_samplers_names)
+        scenes = {s.get_name():s for s in config.scenes}
+        filters = {v.get_name():v for v in config.filter_versions}
+        samplers = {v.get_name():v for v in config.sampler_versions}
+
+    print('Comparing results...')
     compare_techniques_results(
         os.path.join(current_slot_dir, 'denoisers'),
-        g_scenes_names,
+        scenes,
+        filters,
         scenes_dir,
         exr2png_exec,
         compare_exec,
@@ -555,15 +639,23 @@ def cmd_results_compute(args):
 
     compare_techniques_results(
         os.path.join(current_slot_dir, 'samplers'),
-        g_scenes_names,
+        scenes,
+        samplers,
         scenes_dir,
         exr2png_exec,
         compare_exec,
         args.overwrite
     )
 
+    print('Updating results page cache...')
+    cmd_results_update(args)
+
 
 def cmd_results_show(args):
+    if not os.path.exists(current_slot_dir):
+        print("ERROR: No current slot.")
+        return
+
     load_scenes_g()
     load_filters_g()
     load_results_g()
@@ -582,37 +674,116 @@ def cmd_results_show(args):
     if not metrics:
         metrics = ['mse', 'psnr', 'ssim', 'rmse']
 
-    config = Config(current_config, g_scenes_names, g_filters_names, g_samplers_names)
-    scenes = config.scenes
-    if args.scenes_all:
+    if args.all:
         scenes = g_scenes.values()
-
-    filters = config.filter_versions
-    if args.filters_all:
         filters = g_filters_versions.values()
+        samplers = g_samplers_versions.values()
+    else:
+        if not os.path.exists(current_config):
+            print("ERROR: No current configuration.")
+            return
+        config = Config(current_config, g_scenes_names, g_filters_names, g_samplers_names)
+        scenes = config.scenes
+        filters = config.filter_versions
+        samplers = config.sampler_versions
+
     if filters:
         print('DENOISERS')
-    print_results(filters, scenes, metrics)
-
-    samplers = config.sampler_versions
-    if args.samplers_all:
-        samplers = g_samplers_versions.values()
+        print_results(filters, scenes, metrics)
     if samplers:
         print('SAMPLERS')
-    print_results(samplers, scenes, metrics)
+        print_results(samplers, scenes, metrics)
 
 
-def cmd_results_rank(args):
+# def cmd_results_rank(args):
+#     load_scenes_g()
+#     load_filters_g()
+#     load_results_g()
+#     load_samplers_g()
+#     load_samplers_results_g()
+
+#     metrics = []
+#     if args.mse:
+#         metrics.append('mse')
+#     if args.psnr:
+#         metrics.append('psnr')
+#     if args.ssim:
+#         metrics.append('ssim')
+#     if args.rmse:
+#         metrics.append('rmse')
+#     if not metrics:
+#         metrics = ['mse', 'psnr', 'ssim', 'rmse']
+
+#     config = Config(current_config, g_scenes_names, g_filters_names, g_samplers_names)
+#     scenes = config.scenes
+#     if args.scenes_all:
+#         scenes = g_scenes.values()
+
+#     filters = config.filter_versions
+#     if args.filters_all:
+#         filters = g_filters_versions.values()
+#     if filters:
+#         print('DENOISERS')
+
+#     filters_names = [f.get_name() for f in filters]
+#     for metric in metrics:
+#         data = [[None for y in filters] for x in scenes]
+#         scenes_names = [s.get_name() for s in scenes]
+#         table_has_results = False
+#         for row_i, s in enumerate(scenes):
+#             for col_i, v in enumerate(filters):
+#                 mean_error = 0.0
+#                 n_errors = 0
+#                 for spp in s.spps:
+#                     result = v.get_result(s, spp)
+#                     if result:
+#                         mean_error += getattr(result, metric)
+#                         n_errors += 1
+#                 if n_errors > 0:
+#                     mean_error /= n_errors
+#                 data[row_i][col_i] = mean_error
+#                 table_has_results = True
+
+#         all_scenes_mean = [0.0 for y in filters]
+#         non_null_count = [0 for y in filters]
+#         for row_i, s in enumerate(scenes):
+#             for col_i, v in enumerate(filters):
+#                 error = data[row_i][col_i]
+#                 if error:
+#                     all_scenes_mean[col_i] += error
+#                     non_null_count[col_i] += 1
+#         for col_i, v in enumerate(filters):
+#             if non_null_count[col_i]:
+#                 all_scenes_mean[col_i] /= non_null_count[col_i]
+
+#         if table_has_results:
+#             print_table(metric, ' ', 'Filters', scenes_names, filters_names, data, 30, 20)
+#             print_table(metric, ' ', 'Filters', ['All scenes error mean'], filters_names, [all_scenes_mean], 30, 20)
+
+
+def cmd_results_export_csv(args):
+    if not os.path.exists(current_slot_dir):
+        print("ERROR: No current slot.")
+        return
+
     load_scenes_g()
     load_filters_g()
+    load_samplers_g()
     load_results_g()
-    filters = techniqueVersionsFromIds(args.filters, g_filters_versions)
-    if not filters:
-        return
+    load_samplers_results_g()
 
-    scenes = scenesFromIds(args.scenes, g_scenes)
-    if not scenes:
-        return
+    if args.all:
+        scenes = g_scenes.values()
+        filters = g_filters_versions.values()
+        samplers = g_samplers_versions.values()
+    else:
+        if not os.path.exists(current_config):
+            print("ERROR: No current configuration.")
+            return
+        config = Config(current_config, g_scenes_names, g_filters_names, g_samplers_names)
+        scenes = [s.scene for s in config.scenes]
+        filters = config.filter_versions
+        samplers = config.sampler_versions
 
     metrics = []
     if args.mse:
@@ -621,70 +792,10 @@ def cmd_results_rank(args):
         metrics.append('psnr')
     if args.ssim:
         metrics.append('ssim')
+    if args.rmse:
+        metrics.append('rmse')
     if not metrics:
-        metrics = ['mse', 'psnr', 'ssim']
-
-    filters_names = [f.get_name() for f in filters]
-    for metric in metrics:
-        data = [[None for y in filters] for x in scenes]
-        scenes_names = [s.name for s in scenes]
-        table_has_results = False
-        for row_i, s in enumerate(scenes):
-            for col_i, v in enumerate(filters):
-                mean_error = 0.0
-                n_errors = 0
-                for spp in s.spps:
-                    result = v.get_result(s, spp)
-                    if result:
-                        mean_error += getattr(result, metric)
-                        n_errors += 1
-                if n_errors > 0:
-                    mean_error /= n_errors
-                data[row_i][col_i] = mean_error
-                table_has_results = True
-
-        all_scenes_mean = [0.0 for y in filters]
-        non_null_count = [0 for y in filters]
-        for row_i, s in enumerate(scenes):
-            for col_i, v in enumerate(filters):
-                error = data[row_i][col_i]
-                if error:
-                    all_scenes_mean[col_i] += error
-                    non_null_count[col_i] += 1
-        for col_i, v in enumerate(filters):
-            if non_null_count[col_i]:
-                all_scenes_mean[col_i] /= non_null_count[col_i]
-
-        if table_has_results:
-            print_table(metric, ' ', 'Filters', scenes_names, filters_names, data, 30, 20)
-            print_table(metric, ' ', 'Filters', ['All scenes error mean'], filters_names, [all_scenes_mean], 30, 20)
-
-
-def print_table_csv(data):
-    for row in data:
-        for value in row:
-            if value:
-                print('{:.4f},'.format(value), end='')
-            else:
-                print('{:.4f},'.format(0.0), end='')
-        print()
-
-
-def cmd_results_export_csv(args):
-    load_scenes_g()
-    load_filters_g()
-    load_results_g()
-    filters = techniqueVersionsFromIds(args.filters, g_filters_versions)
-    if not filters:
-        return
-
-    scenes = scenesFromIds(args.scenes, g_scenes)
-    if not scenes:
-        return
-
-    metrics = ['mse', 'psnr', 'ssim']
-    if args.metrics:
-        metrics = args.metrics
+        metrics = ['mse', 'psnr', 'ssim', 'rmse']
 
     mse_scale = 1.0
     if args.mse_scale:
@@ -694,51 +805,103 @@ def cmd_results_export_csv(args):
     if args.rmse_scale:
         rmse_scale = args.rmse_scale
 
-    data = []
-    row_i = 0
-    for scene in scenes:
-        spps = []
-        if args.spps:
-            spps = args.spps
-        else:
-            spps = scene.spps
-        for spp in spps:
-            data.append([None for y in itertools.product(filters, metrics)])
-            col_i = 0
-            for f in filters:
-                result = f.get_result(scene, spp)
-                for metric in metrics:
-                    if result:
-                        if metric == 'mse':
-                            data[row_i][col_i] = getattr(result, metric) * mse_scale
-                        elif metric == 'rmse':
-                            data[row_i][col_i] = getattr(result, metric) * rmse_scale
-                        else:
-                            data[row_i][col_i] = getattr(result, metric)
-                    col_i += 1
-            row_i += 1
-    print_table_csv(data)
+    if filters:
+        print('Filters')
+        print_csv(scenes, filters, metrics, mse_scale, rmse_scale)
+    if samplers:
+        print('Samplers')
+        print_csv(scenes, samplers, metrics, mse_scale, rmse_scale)
 
 
 def cmd_export_page(args):
+    if not os.path.exists(current_slot_dir):
+        print("ERROR: No current slot.")
+        return
+
     if os.path.isdir(args.dest):
         if args.overwrite:
-            print('Overwriting existing destination.')
-            shutil.rmtree(args.dest)
+            print('Overwriting existing files.')
         else:
-            print('Destination already exists.')
+            print('Destination already exists (see option \'--overwrite\').')
             return
 
-    # copy results
-    results_dest = os.path.join(args.dest, 'Results')
-    shutil.copytree(current_slot_dir, results_dest, ignore=shutil.ignore_patterns('*.exr', '*.json'))
-    shutil.copyfile(os.path.join(current_slot_dir, 'results.json'), os.path.join(args.dest, 'results.json'))
-    shutil.copyfile(os.path.join(current_slot_dir, 'scenes.json'), os.path.join(args.dest, 'scenes.json'))
-    shutil.copyfile(os.path.join(current_slot_dir, 'filters.json'), os.path.join(args.dest, 'filters.json'))
-    # copy references
-    references_dest = os.path.join(args.dest, 'references')
-    shutil.copytree(os.path.join(scenes_dir, 'references'), references_dest,
-                    ignore=shutil.ignore_patterns('*.exr', '*.log', '*.txt', '*.py', 'bad_imgs', 'partials', 'bad_partials'))
+    load_scenes_g()
+    load_filters_g()
+    load_samplers_g()
+    load_results_g()
+    load_samplers_results_g()
+
+    if args.all:
+        scenes = g_scenes.values()
+        filters = g_filters_versions.values()
+        samplers = g_samplers_versions.values()
+        scene_config_spps = None
+    else:
+        if not os.path.exists(current_config):
+            print("ERROR: No current configuration.")
+            return
+        config = Config(current_config, g_scenes_names, g_filters_names, g_samplers_names)
+        scenes = [s.scene for s in config.scenes]
+        filters = config.filter_versions
+        samplers = config.sampler_versions
+        scene_config_spps = {s.scene.id : s.spps for s in config.scenes}
+
+    def copy_results(versions, scene_config_spps, tech_path):
+        for version in versions:
+            for result in version.results:
+                if scene_config_spps:
+                    if result.scene.id not in scene_config_spps:
+                        continue
+                    spps = scene_config_spps[result.scene.id]
+                    if result.spp not in spps:
+                        continue
+                path = os.path.join(tech_path, version.technique.name, version.tag, result.scene.name)
+                dest_path = os.path.join(args.dest, 'data', path)
+                if not os.path.exists(dest_path):
+                    os.makedirs(dest_path)
+                suffixes = [
+                    os.path.join(path, '{}_0.png'.format(result.spp)),
+                    os.path.join(path, '{}_0_mse_map.png'.format(result.spp)),
+                    os.path.join(path, '{}_0_ssim_map.png'.format(result.spp)),
+                    os.path.join(path, '{}_0_rmse_map.png'.format(result.spp)),
+                ]
+                for suffix in suffixes:
+                    img = os.path.join(current_slot_dir, suffix)
+                    if not os.path.isfile(img):
+                        continue
+                    print('{} -> {}'.format(img, os.path.join(args.dest, 'data', suffix)))
+                    shutil.copyfile(img, os.path.join(args.dest, 'data', suffix))
+
+    # copy filters and samplers result images
+    copy_results(filters, scene_config_spps, 'denoisers')
+    copy_results(samplers, scene_config_spps, 'samplers')
+    # copy data files
+    data_dest = os.path.join(args.dest, 'data')
+    shutil.copyfile(os.path.join(current_slot_dir, 'scenes.json'), os.path.join(data_dest, 'scenes.json'))
+    shutil.copyfile(os.path.join(current_slot_dir, 'filters.json'), os.path.join(data_dest, 'filters.json'))
+    shutil.copyfile(os.path.join(current_slot_dir, 'results.json'), os.path.join(data_dest, 'results.json'))
+    shutil.copyfile(os.path.join(current_slot_dir, 'samplers.json'), os.path.join(data_dest, 'samplers.json'))
+    shutil.copyfile(os.path.join(current_slot_dir, 'samplers_results.json'), os.path.join(data_dest, 'samplers_results.json'))
+    # copy scenes images
+    for scene in scenes:
+        orig_gt = os.path.join(scenes_dir, scene.ground_truth)
+        orig_png = os.path.splitext(orig_gt)[0] + '.png'
+        orig_thumb = os.path.splitext(orig_gt)[0] + '_thumb256.jpg'
+        dest_gt = os.path.join(args.dest, 'scenes', scene.ground_truth)
+        dest_path = os.path.dirname(dest_gt)
+        dest_png = os.path.splitext(dest_gt)[0] + '.png'
+        dest_thumb = os.path.splitext(dest_gt)[0] + '_thumb256.jpg'
+        if not os.path.exists(dest_path):
+            os.makedirs(dest_path)
+        print('{} -> {}'.format(orig_png, dest_png))
+        shutil.copyfile(orig_png, dest_png)
+        print('{} -> {}'.format(orig_thumb, dest_thumb))
+        shutil.copyfile(orig_thumb, dest_thumb)
+    # copy page files
+    if not args.no_page:
+        src = os.path.join(install_prefix_dir, 'share/fbksd/page/')
+        dest = args.dest if args.dest[-1] == '/' else args.dest + '/'
+        subprocess.run(['rsync', '-a', '--exclude', 'data', '--exclude', 'scenes', src, dest])
 
 
 def cmd_slots(args):
@@ -766,8 +929,10 @@ def cmd_slots_new(args):
         return
 
     os.mkdir(new_path)
-    os.unlink(current_slot_dir)
-    os.symlink(args.name, current_slot_dir)
+    if args.select:
+        if os.path.islink(current_slot_dir):
+            os.unlink(current_slot_dir)
+        os.symlink(args.name, current_slot_dir)
 
 
 def cmd_slots_select(args):
@@ -788,6 +953,9 @@ def cmd_serve(args):
     stdout = sys.stderr
 
     if os.path.isdir(current_slot_dir) and os.path.isdir(scenes_dir):
+        if not args.no_update:
+            print('Updating results page cache...')
+            cmd_results_update(args)
         orig_page = os.path.join(install_prefix_dir, 'share/fbksd/page/')
         subprocess.run(['rsync', '-a', '--delete', orig_page, page_dir])
         try:
@@ -802,7 +970,7 @@ def cmd_serve(args):
             sys.stderr = stdout
             print('\b\bfinished.')
     else:
-        print('ERROR: This is not a fbksd workspace directory.')
+        print('ERROR: Missing results slot or scenes folder.')
 
 
 
@@ -836,11 +1004,11 @@ if __name__ == "__main__":
     configSubparsers = parserConfig.add_subparsers(title='subcommands')
     ## config new
     parserConfigNew = configSubparsers.add_parser('new', formatter_class=RawTextHelpFormatter,
-         help='Creates and selects a new configuration.',
+         help='Creates a new configuration.',
          description=
-            'Creates and selects a new configuration with the given name, containing the scenes, techniques,\n'
-            'and spps, provided using the corresponding arguments.\n\n'
-            'The config name \'all\' is reserved, and can be used to always run all available scenes and techniques.')
+            'Creates a new configuration with the given name, containing the scenes, techniques,\n'
+            'and spps provided using the corresponding options.\n\n'
+            'The created config is not selected by default. You can select it using the \'--select\' option.')
     parserConfigNew.add_argument('name', metavar='NAME', help='Configuration name.')
     parserConfigNew.add_argument('--scenes', nargs='+', type=int, metavar='SCENE_ID', help='Scenes to be included.')
     parserConfigNew.add_argument('--scenes-all', action='store_true', help='Include all scenes.')
@@ -849,6 +1017,7 @@ if __name__ == "__main__":
     parserConfigNew.add_argument('--samplers', nargs='+', type=int, metavar='SAMPLER_ID', help='Samplers to be included.')
     parserConfigNew.add_argument('--samplers-all', action='store_true', help='Include all samplers.')
     parserConfigNew.add_argument('--spps', metavar='SPP', type=int, nargs='+', help='List of spps to use.')
+    parserConfigNew.add_argument('--select', action='store_true', help='Select the created config.')
     parserConfigNew.set_defaults(func=cmd_config_new)
     ## config select
     parserConfigSelect = configSubparsers.add_parser('select', formatter_class=RawTextHelpFormatter,
@@ -934,7 +1103,8 @@ if __name__ == "__main__":
     parserFilters.set_defaults(func=cmd_filters)
 
     # samplers
-    parserSamplers = subparsers.add_parser('samplers', help='List all samplers.', description="List all samplers.")
+    parserSamplers = subparsers.add_parser('samplers', formatter_class=RawTextHelpFormatter,
+        help='List all samplers.', description="List all samplers.")
     parserSamplers.set_defaults(func=cmd_samplers)
 
     # scenes
@@ -951,11 +1121,14 @@ if __name__ == "__main__":
     parserScenes.add_argument('--ready', action='store_true', help='List only scenes from ready renderers.')
     parserScenes.set_defaults(func=cmd_scenes)
 
-    # filter-info, sampler-info
-    parserFilterInfo = subparsers.add_parser('filter-info', help='Shows details about a filter.')
+    # filter-info
+    parserFilterInfo = subparsers.add_parser('filter-info', formatter_class=RawTextHelpFormatter,
+        help='Show details about filters.', description='Show details about filters.')
     parserFilterInfo.add_argument('filters', metavar='FILTER_ID', type=int, nargs='+', help='Filter ID.')
     parserFilterInfo.set_defaults(func=cmd_filter_info)
-    parserSamplerInfo = subparsers.add_parser('sampler-info', help='Shows details about a sampler.')
+    # sampler-info
+    parserSamplerInfo = subparsers.add_parser('sampler-info', formatter_class=RawTextHelpFormatter,
+        help='Shows details about samplers.', description='Shows details about samplers.')
     parserSamplerInfo.add_argument('samplers', metavar='SAMPLER_ID', type=int, nargs='+', help='Sampler ID.')
     parserSamplerInfo.set_defaults(func=cmd_sampler_info)
 
@@ -970,7 +1143,14 @@ if __name__ == "__main__":
     parserResults = subparsers.add_parser('results', help='Manipulate results.')
     resultsSubparsers = parserResults.add_subparsers(title='results subcommands')
     ## results compute
-    parserResultsCompute = resultsSubparsers.add_parser('compute', help='Compute errors for the results saved in the results folder.')
+    parserResultsCompute = resultsSubparsers.add_parser('compute',formatter_class=RawTextHelpFormatter,
+        help='Compute errors for the saved result images.',
+        description=
+            'Compute errors for the saved result images.\n\n'
+            'This action should be performed after running a benchmark.\n'
+            'By default, only results for the current config are computed. You can compute all the results\n'
+            'in the workspace using the \'--all\' option.')
+    parserResultsCompute.add_argument('--all', action='store_true', help='Compute all results available in the workspace.')
     parserResultsCompute.add_argument('--overwrite', action='store_true', dest='overwrite', help='Overwrite previous results.')
     parserResultsCompute.set_defaults(func=cmd_results_compute)
     ## results show
@@ -978,63 +1158,101 @@ if __name__ == "__main__":
         help='Show results.',
         description=
             'Show results.\n\n'
-            'By default, all errors metrics for the current config are shown. You can show results for all the techniques\n'
-            'in the workspace using the \'--{filters,samplers}-all\' options, and also specify individual error metrics.')
-    parserResultsShow.add_argument('--filters-all', action='store_true', help='Show all filters in the workspace.')
-    parserResultsShow.add_argument('--samplers-all', action='store_true', help='Show all samplers in the workspace.')
-    parserResultsShow.add_argument('--scenes-all', action='store_true', help='Show all scenes in the workspace.')
+            'By default, only errors metrics for the current config are shown. You can show all the results\n'
+            'in the workspace using the \'--all\' options, and also specify individual error metrics.')
+    parserResultsShow.add_argument('--all', action='store_true', help='Show all results available in the workspace.')
     parserResultsShow.add_argument('--ssim', action='store_true', help='Show ssim error.')
     parserResultsShow.add_argument('--mse', action='store_true', help='Shows mse error.')
     parserResultsShow.add_argument('--psnr', action='store_true', help='Shows psnr error.')
     parserResultsShow.add_argument('--rmse', action='store_true', help='Shows rmse error.')
     parserResultsShow.set_defaults(func=cmd_results_show)
     ## results rank
-    parserResultsRank = resultsSubparsers.add_parser('rank', help='show a table ranking the filters.')
-    parserResultsRank.add_argument('--filters', nargs='+', type=int, metavar='FILTER_ID', help='Filters ids (default: all).')
-    parserResultsRank.add_argument('--samplers', nargs='+', type=int, metavar='SAMPLER_ID', help='Samplers ids (default: all).')
-    parserResultsRank.add_argument('--scenes', nargs='+', type=int, metavar='SCENE_ID', help='Scenes ids (default: all).')
-    parserResultsRank.add_argument('--ssim', action='store_true', help='Shows ssim error.')
-    parserResultsRank.add_argument('--mse', action='store_true', help='Shows mse error.')
-    parserResultsRank.add_argument('--psnr', action='store_true', help='Shows psnr error.')
-    parserResultsRank.set_defaults(func=cmd_results_rank)
-    ## result export-csv
-    parserResultsExportCSV = resultsSubparsers.add_parser('export-csv', help='Prints a CSV table with the errors.')
-    parserResultsExportCSV.add_argument('--filters', nargs='+', type=int, metavar='FILTER_ID', help='Filters ids (default: all).')
-    parserResultsExportCSV.add_argument('--samplers', nargs='+', type=int, metavar='SAMPLER_ID', help='Samplers ids (default: all).')
-    parserResultsExportCSV.add_argument('--scenes', nargs='+', type=int, metavar='SCENE_ID', help='Scenes ids (default: all).')
-    parserResultsExportCSV.add_argument('--spps', metavar='SPP', type=int, dest='spps', nargs='+',
-        help='List of spps to use (overwrite the ones defines in the profile).')
-    parserResultsExportCSV.add_argument('--mse-scale', type=float, dest='mse_scale', help='Scale applyed to the mse values.')
-    parserResultsExportCSV.add_argument('--rmse-scale', type=float, dest='rmse_scale', help='Scale applyed to the rmse values.')
-    parserResultsExportCSV.add_argument('--metrics', nargs='+', metavar='METRIC',
-        help='List of metrics to export. Is this option is not used, all metrics are exported. Supported metrics are: mse, psnr, rmse, ssim.')
+    # parserResultsRank = resultsSubparsers.add_parser('rank', help='Show a table ranking the filters.')
+    # parserResultsRank.add_argument('--filters-all', action='store_true', help='Show all filters in the workspace.')
+    # parserResultsRank.add_argument('--samplers-all', action='store_true', help='Show all samplers in the workspace.')
+    # parserResultsRank.add_argument('--scenes-all', action='store_true', help='Show all scenes in the workspace.')
+    # parserResultsRank.add_argument('--ssim', action='store_true', help='Shows ssim error.')
+    # parserResultsRank.add_argument('--mse', action='store_true', help='Shows mse error.')
+    # parserResultsRank.add_argument('--psnr', action='store_true', help='Shows psnr error.')
+    # parserResultsRank.add_argument('--rmse', action='store_true', help='Shows rmse error.')
+    # parserResultsRank.set_defaults(func=cmd_results_rank)
+    ## result print-csv
+    parserResultsExportCSV = resultsSubparsers.add_parser('print-csv', formatter_class=RawTextHelpFormatter,
+        help='Print CSV tables with the results.',
+        description=
+            'Print CSV tables with the results.\n\n'
+            'The results are printed in the folowing layout (using \',\' to separete cells):\n\n'
+            '│         │       │ technique 1 │          │ technique 2 │          │\n'
+            '│         │       │ metric 1    │ metric 2 │ metric 1    │ metric 2 │\n'
+            '│ scene 1 │ spp 1 │    e1       │    e2    │    e3       │    e4    │\n'
+            '│         │ spp 2 │    e5       │    e6    │    e7       │    e8    │\n'
+            '│ scene 2 │ spp 1 │    e9       │    e10   │    e11      │    e12   │\n'
+            '│         │ spp 2 │    e13      │    e14   │    e15      │    e16   │\n\n'
+            'By default, only results for the current config are included.\n'
+            'You can use the option \'--all\' to include all results available in the workspace.')
+    parserResultsExportCSV.add_argument('--all', action='store_true', help='Include all available results.')
+    parserResultsExportCSV.add_argument('--ssim', action='store_true', help='Include ssim error.')
+    parserResultsExportCSV.add_argument('--mse', action='store_true', help='Includes mse error.')
+    parserResultsExportCSV.add_argument('--psnr', action='store_true', help='Includes psnr error.')
+    parserResultsExportCSV.add_argument('--rmse', action='store_true', help='Includes rmse error.')
+    parserResultsExportCSV.add_argument('--mse-scale', type=float, dest='mse_scale', help='Scale applied to the mse values.')
+    parserResultsExportCSV.add_argument('--rmse-scale', type=float, dest='rmse_scale', help='Scale applied to the rmse values.')
     parserResultsExportCSV.set_defaults(func=cmd_results_export_csv)
     ## results export
-    parserResultsExport = resultsSubparsers.add_parser('export',
-        help='Export results and reference images. This is usefull to view results in a different results page.'
-    )
+    parserResultsExport = resultsSubparsers.add_parser('export', formatter_class=RawTextHelpFormatter,
+        help='Export the results and the visualization page.',
+        description=
+            'Export the results and the visualization page.\n\n'
+            'The exported page can be statically served by any webserver.\n'
+            'By default, only results for the current config are included.\n'
+            'You can use the option \'--all\' to include all results available in the workspace.')
     parserResultsExport.add_argument('dest', metavar='DEST', help='Destination folder.')
+    parserResultsExport.add_argument('--all', action='store_true', help='Export all available results.')
     parserResultsExport.add_argument('--overwrite', action='store_true', help='Overwrites DEST if it already exists.')
+    parserResultsExport.add_argument('--no-page', action='store_true', help='Exports only the results (not the visualization page files.)')
     parserResultsExport.set_defaults(func=cmd_export_page)
     ## results update
-    parserResultsUpdate = resultsSubparsers.add_parser('update', help='Update the data shown on the results page.')
-    parserResultsUpdate.set_defaults(func=cmd_update)
+    parserResultsUpdate = resultsSubparsers.add_parser('update', formatter_class=RawTextHelpFormatter,
+        help='Update the cache used by the results page.',
+        description=
+            'Update the cache used by the results page.\n\n'
+            'The update consists in scanning all computed results and generating the set of files used by\n'
+            'the results page.\n'
+            'By default, only results for the current config are included.\n'
+            'You can use the option \'--all\' to include all results available in the workspace.\n\n'
+            'This action is performed automatically when you run a \'serve\' or \'results compute\'')
+    parserResultsUpdate.add_argument('--all', action='store_true', help='Include all available results.')
+    parserResultsUpdate.set_defaults(func=cmd_results_update)
 
     # slots
-    parserSlots = subparsers.add_parser('slots', help='Manage result slots.')
+    parserSlots = subparsers.add_parser('slots', help='Manage results slots.')
     parserSlots.set_defaults(func=cmd_slots)
     slotsSubparsers = parserSlots.add_subparsers(title='slots subcommands')
     ## slots new
-    parserSlotsNew = slotsSubparsers.add_parser('new', help='Create (and select) a new slot.')
+    parserSlotsNew = slotsSubparsers.add_parser('new', formatter_class=RawTextHelpFormatter,
+        help='Create a new results slot.',
+        description=
+            'Create a new results slot.\n\n'
+            'A slot is basically a folder in the \'<workspace>/results\' directory where all results data\n'
+            '(images, error logs, etc) will be saved.'
+            'The created slot is not selected by default. You can select it using the \'--select\' option.')
     parserSlotsNew.add_argument('name', metavar='NAME', help='New slot name.')
+    parserSlotsNew.add_argument('--select', action='store_true', help='Select the created slot.')
     parserSlotsNew.set_defaults(func=cmd_slots_new)
     ## slots select
-    parserSlotsSelect = slotsSubparsers.add_parser('select', help='Select another slot.')
+    parserSlotsSelect = slotsSubparsers.add_parser('select', help='Select a slot.')
     parserSlotsSelect.add_argument('id', type=int, metavar='SLOT_ID', help='Id of the desired slot.')
     parserSlotsSelect.set_defaults(func=cmd_slots_select)
 
     # serve
-    parserServe = subparsers.add_parser('serve', help='Serve the results page on port 8000 (use Ctrl-C to exit).')
+    parserServe = subparsers.add_parser('serve', formatter_class=RawTextHelpFormatter,
+        help='Serve the results page on port 8000 (use Ctrl-C to exit).',
+        description=
+            'Serve the results page on port 8000 (use Ctrl-C to exit).\n\n'
+            'By default, a \'results update\' command is performed before serving the page.\n'
+            'You can disable the update by using the \'--no-update\' option.')
+    parserServe.add_argument('--no-update', action='store_true', help='Don\'t call the \'results update\' command.')
+    parserServe.add_argument('--all', action='store_true', help='Passes the \'--all\' option to the \'results update\' command.')
     parserServe.set_defaults(func=cmd_serve)
 
     args = parser.parse_args()

@@ -10,6 +10,8 @@ import json
 import glob
 import re
 import shutil
+import itertools
+import sys
 from subprocess import call, Popen, PIPE, STDOUT
 from contextlib import contextmanager
 from fbksd.model import *
@@ -78,11 +80,12 @@ def load_scenes(scenes_file, renderers_dir):
     return g_scenes, g_scenes_names, g_renderers
 
 
-def save_scenes_file(scenes_ids, g_scenes, current_slot_dir):
+def save_scenes_file(scenes, current_slot_dir):
     data = {}
     #for key, scene in g_scenes.items():
-    for key in scenes_ids:
-        scene = g_scenes[key]
+    for scene in scenes.values():
+        if type(scene) == ConfigScene:
+            scene = scene.scene
         scene_dict = {'id':scene.id, 'name':scene.name, 'renderer':scene.renderer.name, 'dof_w':scene.dof_w, 'mb_w':scene.mb_w,
                       'ss_w':scene.ss_w, 'glossy_w':scene.glossy_w, 'gi_w':scene.gi_w}
         scene_dict['reference'] = os.path.splitext(str(scene.ground_truth))[0] + '.png'
@@ -171,7 +174,7 @@ def load_samplers(samplers_dir):
     return load_techniques(samplers_dir, sample_factory, sample_version_factory)
 
 
-def save_techniques_file(scenes_ids, versions_ids, techniques, filepath):
+def save_techniques_file(scenes, versions_ids, techniques, filepath):
     data = []
     for key, f in techniques.items():
         filter_dict = {
@@ -190,7 +193,10 @@ def save_techniques_file(scenes_ids, versions_ids, techniques, filepath):
 
             results_ids = []
             for result in version.results:
-                if result.scene.id in scenes_ids:
+                if result.scene.id in scenes:
+                    s = scenes[result.scene.id]
+                    if type(s) == ConfigScene and result.spp not in s.spps:
+                        continue
                     results_ids.append(result.id)
 
             versions.append({
@@ -223,14 +229,21 @@ def load_techniques_results(techniques, g_scenes, techniques_dir, result_factory
                 if not os.path.isdir(version_results_dir):
                     continue
 
+                spps = []
+                errors_logs_by_spps = {}
                 errors_logs = glob.glob(os.path.join(version_results_dir, '*_0_errors.json'))
                 for errors_log_filename in errors_logs:
                     name = os.path.basename(errors_log_filename)
                     m = re.match(r'(\d+)_.*errors\.json', name)
                     if not m:
                         continue
-                    spp = m.group(1)
+                    spp = int(m.group(1))
+                    spps.append(spp)
+                    errors_logs_by_spps[spp] = errors_log_filename
+                spps.sort()
 
+                for spp in spps:
+                    errors_log_filename = errors_logs_by_spps[spp]
                     result_img_filename = os.path.join(version_results_dir, '{}_0.exr'.format(spp))
                     if not os.path.isfile(result_img_filename):
                         continue
@@ -273,7 +286,7 @@ def load_samplers_results(samplers, scenes, current_slot_dir):
     load_techniques_results(samplers, scenes, os.path.join(current_slot_dir, 'samplers'), result_factory)
 
 
-def save_techniques_result_file(filepath, scenes_ids, g_filters, versions_ids):
+def save_techniques_result_file(filepath, scenes_by_id, g_filters, versions_ids):
     data = {}
     filters = list(g_filters.values())
     for f in filters:
@@ -282,8 +295,12 @@ def save_techniques_result_file(filepath, scenes_ids, g_filters, versions_ids):
                 continue
 
             for result in v.results:
-                if result.scene.id not in scenes_ids:
+                if result.scene.id not in scenes_by_id:
                     continue
+                scene = scenes_by_id[result.scene.id]
+                if type(scene) == ConfigScene:
+                    if result.spp not in scene.spps:
+                        continue
 
                 data[result.id] = {
                     'scene_id': result.scene.id,
@@ -302,12 +319,12 @@ def save_techniques_result_file(filepath, scenes_ids, g_filters, versions_ids):
         json.dump(data, ofile, indent=4)
 
 
-def save_filters_result_file(current_slot_dir, scenes_ids, filters, versions_ids):
-    save_techniques_result_file(os.path.join(current_slot_dir, 'results.json'), scenes_ids, filters, versions_ids)
+def save_filters_result_file(current_slot_dir, scenes_by_id, filters, versions_ids):
+    save_techniques_result_file(os.path.join(current_slot_dir, 'results.json'), scenes_by_id, filters, versions_ids)
 
 
-def save_samplers_result_file(current_slot_dir, scenes_ids, samplers, versions_ids):
-    save_techniques_result_file(os.path.join(current_slot_dir, 'samplers_results.json'), scenes_ids, samplers, versions_ids)
+def save_samplers_result_file(current_slot_dir, scenes_by_id, samplers, versions_ids):
+    save_techniques_result_file(os.path.join(current_slot_dir, 'samplers_results.json'), scenes_by_id, samplers, versions_ids)
 
 
 # get a list of ids and load the corresponding scenes
@@ -491,7 +508,7 @@ def make_error_logs_dict():
             technique_name = m.group(1)
             version_name = m.group(2)
             scene_name = m.group(3)
-            spp = m.group(4)
+            spp = int(m.group(4))
 
             if technique_name in errors_dict:
                 s1 = errors_dict[technique_name]
@@ -522,7 +539,7 @@ def get_error_log(errors_dict, technique_name, version_name, scene_name, spp):
     return log
 
 
-def compare_techniques_results(results_prefix, scenes_names, scenes_dir, exr2png_exec, compare_exec, overwrite = False):
+def compare_techniques_results(results_prefix, scenes_names, versions, scenes_dir, exr2png_exec, compare_exec, overwrite = False):
     if not os.path.exists(results_prefix):
         return
 
@@ -537,8 +554,16 @@ def compare_techniques_results(results_prefix, scenes_names, scenes_dir, exr2png
             technique_name = m.group(1)
             version_name = m.group(2)
             scene_name = m.group(3)
-            spp = m.group(4)
+            spp = int(m.group(4))
+            if scene_name not in scenes_names:
+                continue
+            if versions and ('{}-{}'.format(technique_name, version_name) not in versions):
+                continue
             s = scenes_names[scene_name]
+            if type(s) == ConfigScene:
+                if spp not in s.spps:
+                    continue
+                s = s.scene
 
             img1 = os.path.join(scenes_dir, s.ground_truth)
             if not os.path.isfile(img1):
@@ -625,6 +650,62 @@ def print_results(versions, scenes, metrics):
                         table_has_results = True
             if table_has_results:
                 print_table(scene.get_name(), ' ', metric, names, spps_names, data)
+
+
+def print_csv(scenes, versions, metrics, mse_scale, rmse_scale):
+    def print_table_csv(data):
+        for row in data:
+            for value in row:
+                if value:
+                    print('{},'.format(value), end='')
+                else:
+                    print(',', end='')
+            print()
+
+    def print_errors(scenes, versions, metrics):
+        data = []
+        data.append([None for y in itertools.product(versions, metrics)])
+        data.append([None for y in itertools.product(versions, metrics)])
+        data[0].extend([None, None])
+        data[1].extend([None, None])
+        for i, v in enumerate(versions):
+            data[0][(i * len(metrics)) + 2] = v.get_name()
+        for i, p in enumerate(itertools.product(versions, metrics)):
+            data[1][i + 2] = p[1]
+
+        row_i = 0
+        for scene in scenes:
+            spps = set()
+            for v in versions:
+                results = v.get_results(scene)
+                v_spps = {r.spp for r in results}
+                spps |= v_spps
+            spps = list(spps)
+            spps.sort()
+
+            for i, spp in enumerate(spps):
+                data.append([None for y in itertools.product(versions, metrics)])
+                data[-1].extend([None, None])
+                if i == 0:
+                    data[row_i + 2][0] = scene.get_name()
+                data[row_i + 2][1] = spp
+                col_i = 0
+                for f in versions:
+                    result = f.get_result(scene, spp)
+                    for metric in metrics:
+                        if result:
+                            value = 0.0
+                            if metric == 'mse':
+                                value = getattr(result, metric) * mse_scale
+                            elif metric == 'rmse':
+                                value = getattr(result, metric) * rmse_scale
+                            else:
+                                value = getattr(result, metric)
+                            data[row_i + 2][col_i + 2] = '{:.4f}'.format(value)
+                        col_i += 1
+                row_i += 1
+        print_table_csv(data)
+    print_errors(scenes, versions, metrics)
 
 
 def get_slots(results_dir):
@@ -782,6 +863,39 @@ def load_saved_results(results_dir):
     return scenes, filters, samplers
 
 
+def query_yes_no(question, default="yes"):
+    """Ask a yes/no question via input() and return their answer.
+
+    "question" is a string that is presented to the user.
+    "default" is the presumed answer if the user just hits <Enter>.
+        It must be "yes" (the default), "no" or None (meaning
+        an answer is required of the user).
+
+    The "answer" return value is True for "yes" or False for "no".
+    """
+    valid = {"yes": True, "y": True, "ye": True,
+             "no": False, "n": False}
+    if default is None:
+        prompt = " [y/n] "
+    elif default == "yes":
+        prompt = " [Y/n] "
+    elif default == "no":
+        prompt = " [y/N] "
+    else:
+        raise ValueError("invalid default answer: '%s'" % default)
+
+    while True:
+        sys.stdout.write(question + prompt)
+        choice = input().lower()
+        if default is not None and choice == '':
+            return valid[default]
+        elif choice in valid:
+            return valid[choice]
+        else:
+            sys.stdout.write("Please respond with 'yes' or 'no' "
+                             "(or 'y' or 'n').\n")
+
+
 class Config:
     config_file = ''
     scenes = []
@@ -799,7 +913,10 @@ class Config:
                     scene = all_scenes.get(name)
                     if not scene:
                         continue
-                    self.scenes.append(ConfigScene(scene, s['spps']))
+                    spps = s['spps']
+                    spps = list(set(spps))
+                    spps.sort()
+                    self.scenes.append(ConfigScene(scene, spps))
                     self.scenes_names.add(name)
 
             for f in config['filters']:
