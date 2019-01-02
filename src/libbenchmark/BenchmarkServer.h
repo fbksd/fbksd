@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018 Jonas Deyson
+ * Copyright (c) 2019 Jonas Deyson
  *
  * This software is released under the MIT License.
  *
