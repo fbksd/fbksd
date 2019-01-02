@@ -1,4 +1,4 @@
-# Copyright (c) 2018 Jonas Deyson
+# Copyright (c) 2019 Jonas Deyson
 #
 # This software is released under the MIT License.
 #
@@ -6,6 +6,7 @@
 # along with this program. If not, see <https://opensource.org/licenses/MIT>
 
 import uuid
+import os
 
 class BaseModel():
     def __init__(self, obj_id):
@@ -114,7 +115,7 @@ class Scene(BaseModel):
 
         self.name = ''
         self.path = ''
-        self.ground_truth = ''
+        self.ground_truth = '' # reference .exr image (relative to scenes/<renderer>/ folder)
         self.dof_w = 0.0 # depth-of-field weight
         self.mb_w = 0.0 # motion blur
         self.ss_w = 0.0 # soft shadow
@@ -125,6 +126,10 @@ class Scene(BaseModel):
 
     def get_name(self):
         return self.name
+
+    def get_reference(self):
+        """Returns the reference image relative to the scenes folder."""
+        return os.path.join(self.renderer.name, self.ground_truth)
 
 
 class ConfigScene:
@@ -153,6 +158,12 @@ class ImageRegion(BaseModel):
         self.ss_w = 0.0 # soft shadow
         self.glossy_w = 0.0 # glossy
         self.gi_w = 0.0 # global illumination
+
+
+class ErrorMetric():
+    def __init__(self, name, *, lower_is_better=True):
+        self.name = name
+        self.lower_is_better = lower_is_better
 
 
 class RegionError(BaseModel):

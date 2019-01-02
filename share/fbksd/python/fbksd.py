@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-# Copyright (c) 2018 Jonas Deyson
+# Copyright (c) 2019 Jonas Deyson
 #
 # This software is released under the MIT License.
 #
@@ -34,7 +34,7 @@ current_config     = os.path.join(configs_dir, '.current.json')
 page_dir           = os.path.join(os.getcwd(), '.page')
 results_dir        = os.path.join(os.getcwd(), 'results')
 current_slot_dir   = os.path.join(results_dir, '.current')
-scenes_file        = os.path.join(scenes_dir, 'fbksd-scenes.json')
+scenes_file        = os.path.join(scenes_dir, '.fbksd-scenes-cache.json')
 install_prefix_dir = os.getenv('FBKSD_INSTALL_DIR',
     os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir)))
 
@@ -152,6 +152,10 @@ def cmd_init(args):
 
 
 def cmd_config(args):
+    check = check_configs(configs_dir) and check_current_config(current_config)
+    if not check:
+        return
+
     configs, current = get_configs(configs_dir, current_config)
     if not configs:
         print('No configuration found.')
@@ -170,6 +174,10 @@ def cmd_config(args):
 
 
 def cmd_config_new(args):
+    check = check_scenes(scenes_dir) and check_filters(denoisers_dir) and check_samplers(samplers_dir)
+    if not check:
+        return
+
     new_config_file = os.path.join(configs_dir, args.name + '.json')
     if os.path.exists(new_config_file):
         print('ERROR: Config {} already exists.'.format(args.name))
@@ -217,6 +225,10 @@ def cmd_config_new(args):
 
 
 def cmd_config_select(args):
+    check = check_configs(configs_dir)
+    if not check:
+        return
+
     configs, current = get_configs(configs_dir, current_config)
     if args.id < 1 or args.id > len(configs):
         print('ERROR: Invalid config ID.')
@@ -230,6 +242,10 @@ def cmd_config_select(args):
 
 
 def cmd_config_show(args):
+    check = check_configs(configs_dir)
+    if not check:
+        return
+
     if args.id is not None:
         configs, current = get_configs(configs_dir, current_config)
         if args.id < 1 or args.id > len(configs):
@@ -249,14 +265,14 @@ def cmd_config_show(args):
     config = Config(current_config, g_scenes_names, g_filters_names, g_samplers_names)
     config.print()
 
-    # with open(config_file) as f:
-    #     config = json.load(f)
-    #     print(json.dumps(config, indent=4, sort_keys=True))
-
 
 def cmd_config_add_scenes(args):
-    if not os.path.exists(current_config):
-        print("ERROR: No current configuration.")
+    check = check_configs(configs_dir) and \
+            check_current_config(current_config) and \
+            check_scenes(scenes_dir) and \
+            check_filters(denoisers_dir) and \
+            check_samplers(samplers_dir)
+    if not check:
         return
 
     load_scenes_g()
@@ -279,8 +295,12 @@ def cmd_config_add_scenes(args):
 
 
 def cmd_config_remove_scenes(args):
-    if not os.path.exists(current_config):
-        print("ERROR: No current configuration.")
+    check = check_configs(configs_dir) and \
+            check_current_config(current_config) and \
+            check_scenes(scenes_dir) and \
+            check_filters(denoisers_dir) and \
+            check_samplers(samplers_dir)
+    if not check:
         return
 
     load_scenes_g()
@@ -295,8 +315,12 @@ def cmd_config_remove_scenes(args):
 
 
 def cmd_config_add_filters(args):
-    if not os.path.exists(current_config):
-        print("ERROR: No current configuration.")
+    check = check_configs(configs_dir) and \
+            check_current_config(current_config) and \
+            check_scenes(scenes_dir) and \
+            check_filters(denoisers_dir) and \
+            check_samplers(samplers_dir)
+    if not check:
         return
 
     load_scenes_g()
@@ -316,8 +340,12 @@ def cmd_config_add_filters(args):
 
 
 def cmd_config_remove_filters(args):
-    if not os.path.exists(current_config):
-        print("ERROR: No current configuration.")
+    check = check_configs(configs_dir) and \
+            check_current_config(current_config) and \
+            check_scenes(scenes_dir) and \
+            check_filters(denoisers_dir) and \
+            check_samplers(samplers_dir)
+    if not check:
         return
 
     load_scenes_g()
@@ -332,8 +360,12 @@ def cmd_config_remove_filters(args):
 
 
 def cmd_config_add_samplers(args):
-    if not os.path.exists(current_config):
-        print("ERROR: No current configuration.")
+    check = check_configs(configs_dir) and \
+            check_current_config(current_config) and \
+            check_scenes(scenes_dir) and \
+            check_filters(denoisers_dir) and \
+            check_samplers(samplers_dir)
+    if not check:
         return
 
     load_scenes_g()
@@ -353,8 +385,12 @@ def cmd_config_add_samplers(args):
 
 
 def cmd_config_remove_samplers(args):
-    if not os.path.exists(current_config):
-        print("ERROR: No current configuration.")
+    check = check_configs(configs_dir) and \
+            check_current_config(current_config) and \
+            check_scenes(scenes_dir) and \
+            check_filters(denoisers_dir) and \
+            check_samplers(samplers_dir)
+    if not check:
         return
 
     load_scenes_g()
@@ -369,8 +405,12 @@ def cmd_config_remove_samplers(args):
 
 
 def cmd_config_add_spps(args):
-    if not os.path.exists(current_config):
-        print("ERROR: No current configuration.")
+    check = check_configs(configs_dir) and \
+            check_current_config(current_config) and \
+            check_scenes(scenes_dir) and \
+            check_filters(denoisers_dir) and \
+            check_samplers(samplers_dir)
+    if not check:
         return
 
     load_scenes_g()
@@ -396,8 +436,12 @@ def cmd_config_add_spps(args):
 
 
 def cmd_config_remove_spps(args):
-    if not os.path.exists(current_config):
-        print("ERROR: No current configuration.")
+    check = check_configs(configs_dir) and \
+            check_current_config(current_config) and \
+            check_scenes(scenes_dir) and \
+            check_filters(denoisers_dir) and \
+            check_samplers(samplers_dir)
+    if not check:
         return
 
     load_scenes_g()
@@ -422,9 +466,13 @@ def cmd_config_remove_spps(args):
     config.save()
 
 
-def cmd_results_update(args):
-    if not os.path.exists(current_slot_dir):
-        print("ERROR: No current slot.")
+def cmd_page_update(args):
+    check = check_scenes(scenes_dir) and \
+            check_filters(denoisers_dir) and \
+            check_samplers(samplers_dir) and \
+            check_results(results_dir) and \
+            check_current_slot(current_slot_dir)
+    if not check:
         return
 
     load_scenes_g()
@@ -438,8 +486,9 @@ def cmd_results_update(args):
         filters_ids = g_filters_versions.keys()
         samplers_ids = g_samplers_versions.keys()
     else:
-        if not os.path.exists(current_config):
-            print("ERROR: No current configuration.")
+        check = check_configs(configs_dir) and \
+                check_current_config(current_config)
+        if not check:
             return
         config = Config(current_config, g_scenes_names, g_filters_names, g_samplers_names)
         scenes = {s.scene.id : s for s in config.scenes}
@@ -454,10 +503,19 @@ def cmd_results_update(args):
 
 
 def cmd_filters(args):
+    if not check_filters(denoisers_dir):
+        return
+
     load_filters_g()
+    if not g_filters_versions:
+        print('No filters found.')
+        return
+
     print('{0:<5s}{1:<20s}{2:<10s}'.format('Id', 'Name', 'Status'))
     print('{0:75s}'.format('-'*75))
     for id, v in g_filters_versions.items():
+        if v.status != 'ready' and args.ready:
+            continue
         if v.tag == 'default':
             print('{0:<5s}{1:<20s}{2:<10s}'.format(str(id), v.technique.name, v.status))
         else:
@@ -466,6 +524,9 @@ def cmd_filters(args):
 
 
 def cmd_samplers(args):
+    if not check_samplers(samplers_dir):
+        return
+
     load_samplers_g()
     if not g_samplers_versions:
         print('No samplers found.')
@@ -482,6 +543,9 @@ def cmd_samplers(args):
 
 
 def cmd_filter_info(args):
+    if not check_filters(denoisers_dir):
+        return
+
     load_filters_g()
     filters = techniqueVersionsFromIds(args.filters, g_filters_versions)
 
@@ -498,6 +562,9 @@ def cmd_filter_info(args):
 
 
 def cmd_sampler_info(args):
+    if not check_samplers(samplers_dir):
+        return
+
     load_samplers_g()
     samplers = techniqueVersionsFromIds(args.samplers, g_samplers_versions)
 
@@ -529,8 +596,7 @@ def cmd_scenes(args):
             return
 
     needs_update = False
-    if not os.path.isdir(scenes_dir):
-        print('ERROR: Scenes directory not set (see \"--set\" option).\n')
+    if not check_scenes(scenes_dir):
         return
     elif not os.path.exists(scenes_file):
         needs_update = True
@@ -559,11 +625,14 @@ def cmd_scenes(args):
 
 
 def cmd_run(args):
-    if not os.path.exists(current_config):
-        print("ERROR: No current configuration.")
-        return
-    if not os.path.exists(current_slot_dir):
-        print("ERROR: No current slot.")
+    check = check_configs(configs_dir) and \
+            check_current_config(current_config) and \
+            check_scenes(scenes_dir) and \
+            check_filters(denoisers_dir) and \
+            check_samplers(samplers_dir) and \
+            check_results(results_dir) and \
+            check_current_slot(current_slot_dir)
+    if not check:
         return
 
     load_scenes_g()
@@ -596,12 +665,18 @@ def cmd_run(args):
         args.overwrite
     )
 
+    print('Benchmark finished. Run \'fbksd results compute\' to compute result errors.')
+
 
 # computes errors for each result image and saves a corresponding log file for each one.
 # overwrite logs that are older then the corresponding result images
 def cmd_results_compute(args):
-    if not os.path.exists(current_slot_dir):
-        print("ERROR: No current slot.")
+    check = check_scenes(scenes_dir) and \
+            check_filters(denoisers_dir) and \
+            check_samplers(samplers_dir) and \
+            check_results(results_dir) and \
+            check_current_slot(current_slot_dir)
+    if not check:
         return
 
     load_scenes_g()
@@ -618,8 +693,9 @@ def cmd_results_compute(args):
         filters = None
         samplers = None
     else:
-        if not os.path.exists(current_config):
-            print("ERROR: No current configuration.")
+        check = check_configs(configs_dir) and \
+                check_current_config(current_config)
+        if not check:
             return
         config = Config(current_config, g_scenes_names, g_filters_names, g_samplers_names)
         scenes = {s.get_name():s for s in config.scenes}
@@ -647,13 +723,17 @@ def cmd_results_compute(args):
         args.overwrite
     )
 
-    print('Updating results page cache...')
-    cmd_results_update(args)
+    print('Updating visualization page cache...')
+    cmd_page_update(args)
 
 
 def cmd_results_show(args):
-    if not os.path.exists(current_slot_dir):
-        print("ERROR: No current slot.")
+    check = check_scenes(scenes_dir) and \
+            check_filters(denoisers_dir) and \
+            check_samplers(samplers_dir) and \
+            check_results(results_dir) and \
+            check_current_slot(current_slot_dir)
+    if not check:
         return
 
     load_scenes_g()
@@ -679,8 +759,9 @@ def cmd_results_show(args):
         filters = g_filters_versions.values()
         samplers = g_samplers_versions.values()
     else:
-        if not os.path.exists(current_config):
-            print("ERROR: No current configuration.")
+        check = check_configs(configs_dir) and \
+                check_current_config(current_config)
+        if not check:
             return
         config = Config(current_config, g_scenes_names, g_filters_names, g_samplers_names)
         scenes = config.scenes
@@ -695,75 +776,61 @@ def cmd_results_show(args):
         print_results(samplers, scenes, metrics)
 
 
-# def cmd_results_rank(args):
-#     load_scenes_g()
-#     load_filters_g()
-#     load_results_g()
-#     load_samplers_g()
-#     load_samplers_results_g()
+def cmd_results_rank(args):
+    check = check_scenes(scenes_dir) and \
+            check_filters(denoisers_dir) and \
+            check_samplers(samplers_dir) and \
+            check_results(results_dir) and \
+            check_current_slot(current_slot_dir)
+    if not check:
+        return
 
-#     metrics = []
-#     if args.mse:
-#         metrics.append('mse')
-#     if args.psnr:
-#         metrics.append('psnr')
-#     if args.ssim:
-#         metrics.append('ssim')
-#     if args.rmse:
-#         metrics.append('rmse')
-#     if not metrics:
-#         metrics = ['mse', 'psnr', 'ssim', 'rmse']
+    load_scenes_g()
+    load_filters_g()
+    load_results_g()
+    load_samplers_g()
+    load_samplers_results_g()
 
-#     config = Config(current_config, g_scenes_names, g_filters_names, g_samplers_names)
-#     scenes = config.scenes
-#     if args.scenes_all:
-#         scenes = g_scenes.values()
+    metrics = []
+    if args.mse:
+        metrics.append(ErrorMetric('mse'))
+    if args.psnr:
+        metrics.append(ErrorMetric('psnr', lower_is_better=False))
+    if args.ssim:
+        metrics.append(ErrorMetric('ssim', lower_is_better=False))
+    if args.rmse:
+        metrics.append(ErrorMetric('rmse'))
+    if not metrics:
+        metrics = [ErrorMetric('mse'),
+            ErrorMetric('psnr', lower_is_better=False),
+            ErrorMetric('ssim', lower_is_better=False),
+            ErrorMetric('rmse')]
 
-#     filters = config.filter_versions
-#     if args.filters_all:
-#         filters = g_filters_versions.values()
-#     if filters:
-#         print('DENOISERS')
+    if args.all:
+        scenes = g_scenes.values()
+        filters = g_filters_versions.values()
+        samplers = g_samplers_versions.values()
+    else:
+        check = check_configs(configs_dir) and \
+                check_current_config(current_config)
+        if not check:
+            return
+        config = Config(current_config, g_scenes_names, g_filters_names, g_samplers_names)
+        scenes = [s.scene for s in config.scenes]
+        filters = config.filter_versions
+        samplers = config.sampler_versions
 
-#     filters_names = [f.get_name() for f in filters]
-#     for metric in metrics:
-#         data = [[None for y in filters] for x in scenes]
-#         scenes_names = [s.get_name() for s in scenes]
-#         table_has_results = False
-#         for row_i, s in enumerate(scenes):
-#             for col_i, v in enumerate(filters):
-#                 mean_error = 0.0
-#                 n_errors = 0
-#                 for spp in s.spps:
-#                     result = v.get_result(s, spp)
-#                     if result:
-#                         mean_error += getattr(result, metric)
-#                         n_errors += 1
-#                 if n_errors > 0:
-#                     mean_error /= n_errors
-#                 data[row_i][col_i] = mean_error
-#                 table_has_results = True
-
-#         all_scenes_mean = [0.0 for y in filters]
-#         non_null_count = [0 for y in filters]
-#         for row_i, s in enumerate(scenes):
-#             for col_i, v in enumerate(filters):
-#                 error = data[row_i][col_i]
-#                 if error:
-#                     all_scenes_mean[col_i] += error
-#                     non_null_count[col_i] += 1
-#         for col_i, v in enumerate(filters):
-#             if non_null_count[col_i]:
-#                 all_scenes_mean[col_i] /= non_null_count[col_i]
-
-#         if table_has_results:
-#             print_table(metric, ' ', 'Filters', scenes_names, filters_names, data, 30, 20)
-#             print_table(metric, ' ', 'Filters', ['All scenes error mean'], filters_names, [all_scenes_mean], 30, 20)
+    rank_techniques('Denoisers Ranking', scenes, filters, metrics)
+    rank_techniques('Samplers Ranking', scenes, samplers, metrics)
 
 
 def cmd_results_export_csv(args):
-    if not os.path.exists(current_slot_dir):
-        print("ERROR: No current slot.")
+    check = check_scenes(scenes_dir) and \
+            check_filters(denoisers_dir) and \
+            check_samplers(samplers_dir) and \
+            check_results(results_dir) and \
+            check_current_slot(current_slot_dir)
+    if not check:
         return
 
     load_scenes_g()
@@ -777,8 +844,9 @@ def cmd_results_export_csv(args):
         filters = g_filters_versions.values()
         samplers = g_samplers_versions.values()
     else:
-        if not os.path.exists(current_config):
-            print("ERROR: No current configuration.")
+        check = check_configs(configs_dir) and \
+                check_current_config(current_config)
+        if not check:
             return
         config = Config(current_config, g_scenes_names, g_filters_names, g_samplers_names)
         scenes = [s.scene for s in config.scenes]
@@ -813,9 +881,13 @@ def cmd_results_export_csv(args):
         print_csv(scenes, samplers, metrics, mse_scale, rmse_scale)
 
 
-def cmd_export_page(args):
-    if not os.path.exists(current_slot_dir):
-        print("ERROR: No current slot.")
+def cmd_page_export(args):
+    check = check_scenes(scenes_dir) and \
+            check_filters(denoisers_dir) and \
+            check_samplers(samplers_dir) and \
+            check_results(results_dir) and \
+            check_current_slot(current_slot_dir)
+    if not check:
         return
 
     if os.path.isdir(args.dest):
@@ -837,8 +909,9 @@ def cmd_export_page(args):
         samplers = g_samplers_versions.values()
         scene_config_spps = None
     else:
-        if not os.path.exists(current_config):
-            print("ERROR: No current configuration.")
+        check = check_configs(configs_dir) and \
+                check_current_config(current_config)
+        if not check:
             return
         config = Config(current_config, g_scenes_names, g_filters_names, g_samplers_names)
         scenes = [s.scene for s in config.scenes]
@@ -884,10 +957,10 @@ def cmd_export_page(args):
     shutil.copyfile(os.path.join(current_slot_dir, 'samplers_results.json'), os.path.join(data_dest, 'samplers_results.json'))
     # copy scenes images
     for scene in scenes:
-        orig_gt = os.path.join(scenes_dir, scene.ground_truth)
+        orig_gt = os.path.join(scenes_dir, scene.get_reference())
         orig_png = os.path.splitext(orig_gt)[0] + '.png'
         orig_thumb = os.path.splitext(orig_gt)[0] + '_thumb256.jpg'
-        dest_gt = os.path.join(args.dest, 'scenes', scene.ground_truth)
+        dest_gt = os.path.join(args.dest, 'scenes', scene.get_reference())
         dest_path = os.path.dirname(dest_gt)
         dest_png = os.path.splitext(dest_gt)[0] + '.png'
         dest_thumb = os.path.splitext(dest_gt)[0] + '_thumb256.jpg'
@@ -898,13 +971,16 @@ def cmd_export_page(args):
         print('{} -> {}'.format(orig_thumb, dest_thumb))
         shutil.copyfile(orig_thumb, dest_thumb)
     # copy page files
-    if not args.no_page:
+    if not args.results_only:
         src = os.path.join(install_prefix_dir, 'share/fbksd/page/')
         dest = args.dest if args.dest[-1] == '/' else args.dest + '/'
         subprocess.run(['rsync', '-a', '--exclude', 'data', '--exclude', 'scenes', src, dest])
 
 
 def cmd_slots(args):
+    if not check_results(results_dir):
+        return
+
     slots, current_slot = get_slots(results_dir)
     print('{0}{1:<4s}{2:<16}{3:<20s}'.format(' ', 'Id', 'Creation Date', 'Name'))
     print('{0:75s}'.format('-'*75))
@@ -919,6 +995,15 @@ def cmd_slots(args):
 
 
 def cmd_slots_new(args):
+    if not check_results(results_dir):
+        return
+
+    invalid_chars = ['.', '/', '\\']
+    for char in invalid_chars:
+        if char in args.name:
+            print('ERROR: Slot name can not contain \'{}\'.'.format(char))
+            return
+
     new_path = os.path.join(results_dir, args.name)
     if os.path.exists(new_path):
         print('ERROR: Slot {} already exists.'.format(args.name))
@@ -936,6 +1021,9 @@ def cmd_slots_new(args):
 
 
 def cmd_slots_select(args):
+    if not check_results(results_dir):
+        return
+
     slots, current_slot = get_slots(results_dir)
     if args.id < 1 or args.id > len(slots):
         print('ERROR: Invalid ID.')
@@ -950,27 +1038,29 @@ def cmd_slots_select(args):
 
 
 def cmd_serve(args):
-    stdout = sys.stderr
+    check = check_results(results_dir) and \
+            check_current_slot(current_slot_dir) and \
+            check_scenes(scenes_dir)
+    if not check:
+        return
 
-    if os.path.isdir(current_slot_dir) and os.path.isdir(scenes_dir):
-        if not args.no_update:
-            print('Updating results page cache...')
-            cmd_results_update(args)
-        orig_page = os.path.join(install_prefix_dir, 'share/fbksd/page/')
-        subprocess.run(['rsync', '-a', '--delete', orig_page, page_dir])
-        try:
-            os.chdir(page_dir)
-            Handler = http.server.SimpleHTTPRequestHandler
-            httpd = socketserver.TCPServer(('', 8000), Handler)
-            print('serving at port 8000. Press Ctrl-C to finish.')
-            f = open(os.devnull, 'w')
-            sys.stderr = f
-            httpd.serve_forever()
-        except KeyboardInterrupt:
-            sys.stderr = stdout
-            print('\b\bfinished.')
-    else:
-        print('ERROR: Missing results slot or scenes folder.')
+    stdout = sys.stderr
+    if not args.no_update:
+        print('Updating visualization page cache...')
+        cmd_page_update(args)
+    orig_page = os.path.join(install_prefix_dir, 'share/fbksd/page/')
+    subprocess.run(['rsync', '-a', '--delete', orig_page, page_dir])
+    try:
+        os.chdir(page_dir)
+        Handler = http.server.SimpleHTTPRequestHandler
+        httpd = socketserver.TCPServer(('', args.port), Handler)
+        print('serving at port {}. Press Ctrl-C to finish.'.format(args.port))
+        f = open(os.devnull, 'w')
+        sys.stderr = f
+        httpd.serve_forever()
+    except KeyboardInterrupt:
+        sys.stderr = stdout
+        print('\b\bfinished.')
 
 
 
@@ -1100,11 +1190,13 @@ if __name__ == "__main__":
     # filters
     parserFilters = subparsers.add_parser('filters', formatter_class=RawTextHelpFormatter,
         help='List all filters.', description='List all filters.')
+    parserFilters.add_argument('--ready', action='store_true', help='List only ready (compiled) denoisers.')
     parserFilters.set_defaults(func=cmd_filters)
 
     # samplers
     parserSamplers = subparsers.add_parser('samplers', formatter_class=RawTextHelpFormatter,
         help='List all samplers.', description="List all samplers.")
+    parserSamplers.add_argument('--ready', action='store_true', help='List only ready (compiled) samplers.')
     parserSamplers.set_defaults(func=cmd_samplers)
 
     # scenes
@@ -1112,7 +1204,7 @@ if __name__ == "__main__":
         help='Manage the scenes cache.',
         description=
             'Without options, this command list all scenes.\n\n'
-            'The scenes are read from the \'scenes/fbksd-scenes.json\' cache file. This file is generated automatically,\n'
+            'The scenes are read from the a cache file located in the \'scenes\' folder. This file is generated automatically,\n'
             'by scanning the \'scenes\' folder. You can update the cache using the \'--update\' option.\n\n'
             'If you keep you scenes folder somewhere else, you can create a link for it in the workspace using the\n'
              '\'--set\' option.')
@@ -1167,15 +1259,18 @@ if __name__ == "__main__":
     parserResultsShow.add_argument('--rmse', action='store_true', help='Shows rmse error.')
     parserResultsShow.set_defaults(func=cmd_results_show)
     ## results rank
-    # parserResultsRank = resultsSubparsers.add_parser('rank', help='Show a table ranking the filters.')
-    # parserResultsRank.add_argument('--filters-all', action='store_true', help='Show all filters in the workspace.')
-    # parserResultsRank.add_argument('--samplers-all', action='store_true', help='Show all samplers in the workspace.')
-    # parserResultsRank.add_argument('--scenes-all', action='store_true', help='Show all scenes in the workspace.')
-    # parserResultsRank.add_argument('--ssim', action='store_true', help='Shows ssim error.')
-    # parserResultsRank.add_argument('--mse', action='store_true', help='Shows mse error.')
-    # parserResultsRank.add_argument('--psnr', action='store_true', help='Shows psnr error.')
-    # parserResultsRank.add_argument('--rmse', action='store_true', help='Shows rmse error.')
-    # parserResultsRank.set_defaults(func=cmd_results_rank)
+    parserResultsRank = resultsSubparsers.add_parser('rank', formatter_class=RawTextHelpFormatter,
+        help='Show the techniques ranking.',
+        description=
+            'The ranking is computed by ordering the techniques for each scene/spp/metric and averaging\n'
+            'all ranks for each technique.\n\n'
+            'Techniques with larger rank value are worst, while techniques with rank closer to 1.0 are better.')
+    parserResultsRank.add_argument('--all', action='store_true', help='Rank all results available in the workspace.')
+    parserResultsRank.add_argument('--ssim', action='store_true', help='Shows ssim error.')
+    parserResultsRank.add_argument('--mse', action='store_true', help='Shows mse error.')
+    parserResultsRank.add_argument('--psnr', action='store_true', help='Shows psnr error.')
+    parserResultsRank.add_argument('--rmse', action='store_true', help='Shows rmse error.')
+    parserResultsRank.set_defaults(func=cmd_results_rank)
     ## result print-csv
     parserResultsExportCSV = resultsSubparsers.add_parser('print-csv', formatter_class=RawTextHelpFormatter,
         help='Print CSV tables with the results.',
@@ -1198,31 +1293,6 @@ if __name__ == "__main__":
     parserResultsExportCSV.add_argument('--mse-scale', type=float, dest='mse_scale', help='Scale applied to the mse values.')
     parserResultsExportCSV.add_argument('--rmse-scale', type=float, dest='rmse_scale', help='Scale applied to the rmse values.')
     parserResultsExportCSV.set_defaults(func=cmd_results_export_csv)
-    ## results export
-    parserResultsExport = resultsSubparsers.add_parser('export', formatter_class=RawTextHelpFormatter,
-        help='Export the results and the visualization page.',
-        description=
-            'Export the results and the visualization page.\n\n'
-            'The exported page can be statically served by any webserver.\n'
-            'By default, only results for the current config are included.\n'
-            'You can use the option \'--all\' to include all results available in the workspace.')
-    parserResultsExport.add_argument('dest', metavar='DEST', help='Destination folder.')
-    parserResultsExport.add_argument('--all', action='store_true', help='Export all available results.')
-    parserResultsExport.add_argument('--overwrite', action='store_true', help='Overwrites DEST if it already exists.')
-    parserResultsExport.add_argument('--no-page', action='store_true', help='Exports only the results (not the visualization page files.)')
-    parserResultsExport.set_defaults(func=cmd_export_page)
-    ## results update
-    parserResultsUpdate = resultsSubparsers.add_parser('update', formatter_class=RawTextHelpFormatter,
-        help='Update the cache used by the results page.',
-        description=
-            'Update the cache used by the results page.\n\n'
-            'The update consists in scanning all computed results and generating the set of files used by\n'
-            'the results page.\n'
-            'By default, only results for the current config are included.\n'
-            'You can use the option \'--all\' to include all results available in the workspace.\n\n'
-            'This action is performed automatically when you run a \'serve\' or \'results compute\'')
-    parserResultsUpdate.add_argument('--all', action='store_true', help='Include all available results.')
-    parserResultsUpdate.set_defaults(func=cmd_results_update)
 
     # slots
     parserSlots = subparsers.add_parser('slots', help='Manage results slots.')
@@ -1244,16 +1314,51 @@ if __name__ == "__main__":
     parserSlotsSelect.add_argument('id', type=int, metavar='SLOT_ID', help='Id of the desired slot.')
     parserSlotsSelect.set_defaults(func=cmd_slots_select)
 
-    # serve
-    parserServe = subparsers.add_parser('serve', formatter_class=RawTextHelpFormatter,
-        help='Serve the results page on port 8000 (use Ctrl-C to exit).',
+    # page
+    parserPage = subparsers.add_parser('page', formatter_class=RawTextHelpFormatter,
+        help="Manage the visualization page.",
         description=
-            'Serve the results page on port 8000 (use Ctrl-C to exit).\n\n'
-            'By default, a \'results update\' command is performed before serving the page.\n'
+            'Once you have run a benchmark (\'fbksd run\') and computed the result errors (\'fbksd results compute\'),\n'
+            'you can visualize the results using the included visualization page.')
+    pageSubparsers = parserPage.add_subparsers(title='subcommands')
+    pageSubparsers.required = True
+    pageSubparsers.dest = 'subcommand'
+    ## page serve
+    parserServe = pageSubparsers.add_parser('serve', formatter_class=RawTextHelpFormatter,
+        help='Serve the visualization page on a given port (use Ctrl-C to exit).',
+        description=
+            'Serve the visualization page on a given port (use Ctrl-C to exit).\n\n'
+            'By default, a \'page update\' command is performed before serving the page.\n'
             'You can disable the update by using the \'--no-update\' option.')
-    parserServe.add_argument('--no-update', action='store_true', help='Don\'t call the \'results update\' command.')
-    parserServe.add_argument('--all', action='store_true', help='Passes the \'--all\' option to the \'results update\' command.')
+    parserServe.add_argument('--port', help='Port number (default is 8000).', type=int, default=8000)
+    parserServe.add_argument('--no-update', action='store_true', help='Don\'t call the \'page update\' command.')
+    parserServe.add_argument('--all', action='store_true', help='Passes the \'--all\' option to the \'page update\' command.')
     parserServe.set_defaults(func=cmd_serve)
+    ## page export
+    parserPageExport = pageSubparsers.add_parser('export', formatter_class=RawTextHelpFormatter,
+        help='Export the results and the visualization page.',
+        description=
+            'Export the results and the visualization page.\n\n'
+            'The exported page can be statically served by any webserver.\n'
+            'By default, only results for the current config are included.\n'
+            'You can use the option \'--all\' to include all results available in the workspace.')
+    parserPageExport.add_argument('dest', metavar='DEST', help='Destination folder.')
+    parserPageExport.add_argument('--all', action='store_true', help='Export all available results.')
+    parserPageExport.add_argument('--overwrite', action='store_true', help='Overwrites DEST if it already exists.')
+    parserPageExport.add_argument('--results-only', action='store_true', help='Exports only the results (not the html/javascrip/etc. page files.)')
+    parserPageExport.set_defaults(func=cmd_page_export)
+    ## page update
+    parserPageUpdate = pageSubparsers.add_parser('update', formatter_class=RawTextHelpFormatter,
+        help='Update the cache used by the visualization page.',
+        description=
+            'Update the cache used by the visualization page.\n\n'
+            'The update consists in scanning all computed results and generating the set of files used by\n'
+            'the visualization page.\n'
+            'By default, only results for the current config are included.\n'
+            'You can use the option \'--all\' to include all results available in the workspace.\n\n'
+            'This action is performed automatically when you run a \'serve\' or \'results compute\'')
+    parserPageUpdate.add_argument('--all', action='store_true', help='Include all available results.')
+    parserPageUpdate.set_defaults(func=cmd_page_update)
 
     args = parser.parse_args()
     if hasattr(args, 'func'):

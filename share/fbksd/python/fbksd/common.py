@@ -1,4 +1,4 @@
-# Copyright (c) 2018 Jonas Deyson
+# Copyright (c) 2019 Jonas Deyson
 #
 # This software is released under the MIT License.
 #
@@ -25,6 +25,49 @@ def cd(newdir):
         yield
     finally:
         os.chdir(prevdir)
+
+
+def check_filters(path):
+    if not os.path.isdir(path):
+        print("ERROR: \'denoisers\' folder not found.")
+        return False
+    return True
+
+def check_samplers(path):
+    if not os.path.isdir(path):
+        print("ERROR: \'samplers\' folder not found.")
+        return False
+    return True
+
+def check_scenes(path):
+    if not os.path.isdir(path):
+        print("ERROR: \'scenes\' folder not found.")
+        return False
+    return True
+
+def check_configs(path):
+    if not os.path.isdir(path):
+        print("ERROR: \'configs\' folder not found.")
+        return False
+    return True
+
+def check_current_config(path):
+    if not os.path.exists(path):
+        print("ERROR: No current configuration.")
+        return False
+    return True
+
+def check_results(path):
+    if not os.path.isdir(path):
+        print("ERROR: \'results\' folder not found.")
+        return False
+    return True
+
+def check_current_slot(path):
+    if not os.path.exists(path):
+        print("ERROR: No current slot.")
+        return False
+    return True
 
 
 def load_renderers(renderers_dir):
@@ -88,8 +131,8 @@ def save_scenes_file(scenes, current_slot_dir):
             scene = scene.scene
         scene_dict = {'id':scene.id, 'name':scene.name, 'renderer':scene.renderer.name, 'dof_w':scene.dof_w, 'mb_w':scene.mb_w,
                       'ss_w':scene.ss_w, 'glossy_w':scene.glossy_w, 'gi_w':scene.gi_w}
-        scene_dict['reference'] = os.path.splitext(str(scene.ground_truth))[0] + '.png'
-        scene_dict['thumbnail'] = os.path.splitext(str(scene.ground_truth))[0] + '_thumb256.jpg'
+        scene_dict['reference'] = os.path.splitext(str(scene.get_reference()))[0] + '.png'
+        scene_dict['thumbnail'] = os.path.splitext(str(scene.get_reference()))[0] + '_thumb256.jpg'
         regions = [{'id':r.id, 'xmin':r.xmin, 'ymin':r.ymin, 'xmax':r.xmax, 'ymax':r.ymax,
                     'dof_w':r.dof_w, 'mb_w':r.mb_w, 'ss_w':r.ss_w, 'glossy_w':r.glossy_w, 'gi_w':r.gi_w} for r in scene.regions]
         scene_dict['regions'] = regions
@@ -565,7 +608,7 @@ def compare_techniques_results(results_prefix, scenes_names, versions, scenes_di
                     continue
                 s = s.scene
 
-            img1 = os.path.join(scenes_dir, s.ground_truth)
+            img1 = os.path.join(scenes_dir, s.renderer.name, s.ground_truth)
             if not os.path.isfile(img1):
                 print('Error: ground truth {} for scene {} not found.'.format(img1, s.name))
                 continue
@@ -594,6 +637,29 @@ def compare_techniques_results(results_prefix, scenes_names, versions, scenes_di
             shutil.move('rmse_map.png', os.path.join(dest_prefix, '{}_0_rmse_map.png'.format(spp)))
             shutil.move('ssim_map.png', os.path.join(dest_prefix, '{}_0_ssim_map.png'.format(spp)))
             print('{}, {}, {} spp'.format(technique_name, scene_name, spp))
+
+
+def print_table_simple(table_title, cols_labels, data):
+    lengths = [len(l) for l in cols_labels]
+    for row in data:
+        for i, l in enumerate(lengths):
+            lengths[i] = max(l, len(row[i]))
+
+    total_length = sum(lengths)
+    header_size = total_length + len(cols_labels) + 1
+    print('┌' + '─'*header_size + '┐')
+    print('│{:^{header_size}}│'.format(table_title, header_size=header_size))
+    print('├' + '─'*header_size + '┤')
+    print('│', end='')
+    for i, l in enumerate(cols_labels):
+        print('{: ^{col_size}}│'.format(l, col_size=lengths[i] + 1), end='')
+    print('\n├' + '─'*header_size + '┤')
+    for row in data:
+        print('│', end='')
+        for i, value in enumerate(row):
+            print('{0:{col_size}}│'.format(value, col_size=lengths[i] + 1), end='')
+        print()
+    print('└' + '─'*header_size + '┘')
 
 
 def print_table(table_title, rows_title, cols_title, rows_labels, cols_labels, data, row_size=20, col_size=8):
@@ -726,13 +792,10 @@ def get_slots(results_dir):
 
 
 def scan_scenes(scenes_dir):
-    """Scan scenes folder for fbksd-scene.json files and builds a fbksd-scenes.json cache file."""
+    """Scan scenes folder for fbksd-scene.json and fbksd-scenes.json files and builds a .fbksd-scenes-cache.json cache file."""
 
     if not os.path.exists(scenes_dir):
         print('ERROR: scenes folder doesn\'t exist.')
-        return
-    if not os.path.exists(os.path.join(scenes_dir, 'scenes-root.json')):
-        print('ERROR: \'scenes-root.json\' file not found in scenes folder.')
         return
 
     def append_scene(scene, scenes):
@@ -744,31 +807,36 @@ def scan_scenes(scenes_dir):
             ref = scene['ref']
         scenes.append({'name': name, 'path':path, 'ref-img':ref_img, 'ref':ref})
 
-    scenes_root = []
-    with open(os.path.join(scenes_dir, 'scenes-root.json')) as f:
-        scenes_root = json.load(f)
-
     data = []
-    for rendeder in scenes_root:
-        with cd(os.path.join(scenes_dir, rendeder['scenes-path'])):
-            scene_files = glob.glob('**/fbksd-scene.json', recursive=True)
-            scenes = []
-            for sf in scene_files:
-                with open(sf) as f:
-                    scene = json.load(f)
-                append_scene(scene, scenes)
-
-            scenes_files = glob.glob('**/fbksd-scenes.json', recursive=True)
-            for sf in scenes_files:
-                scenes_vec = []
-                with open(sf) as f:
-                    scenes_vec = json.load(f)
-                for scene in scenes_vec:
+    with os.scandir(scenes_dir) as it:
+        for entry in it:
+            if entry.name.startswith('.') or not entry.is_dir():
+                continue
+            renderer = entry.name
+            with cd(os.path.join(scenes_dir, renderer)):
+                scene_files = glob.glob('**/fbksd-scene.json', recursive=True)
+                scenes = []
+                for sf in scene_files:
+                    with open(sf) as f:
+                        scene = json.load(f)
+                    scene['path'] = os.path.join(os.path.split(sf)[0], scene['path'])
+                    scene['ref-img'] = os.path.join(os.path.split(sf)[0], scene['ref-img'])
                     append_scene(scene, scenes)
 
-            data.append({'renderer': rendeder['renderer'], 'scenes': scenes})
+                scenes_files = glob.glob('**/fbksd-scenes.json', recursive=True)
+                for sf in scenes_files:
+                    scenes_vec = []
+                    with open(sf) as f:
+                        scenes_vec = json.load(f)
+                    for scene in scenes_vec:
+                        scene['path'] = os.path.join(os.path.split(sf)[0], scene['path'])
+                        scene['ref-img'] = os.path.join(os.path.split(sf)[0], scene['ref-img'])
+                        append_scene(scene, scenes)
 
-    with open(os.path.join(scenes_dir, 'fbksd-scenes.json'), 'w') as ofile:
+                if scenes:
+                    data.append({'renderer': renderer, 'scenes': scenes})
+
+    with open(os.path.join(scenes_dir, '.fbksd-scenes-cache.json'), 'w') as ofile:
         json.dump(data, ofile, indent=4)
 
 
@@ -894,6 +962,42 @@ def query_yes_no(question, default="yes"):
         else:
             sys.stdout.write("Please respond with 'yes' or 'no' "
                              "(or 'y' or 'n').\n")
+
+
+def rank_techniques(title, scenes, versions, metrics):
+    all_spps = set()
+    for f in versions:
+        for r in f.results:
+            all_spps.add(r.spp)
+    spps = all_spps
+    for spp in all_spps:
+        for f in versions:
+            spps = spps & {r.spp for r in f.results}
+    spps = sorted(spps)
+
+    ranks = {f:0.0 for f in versions}
+    num_ranks = 0
+    for scene in scenes:
+        for spp in spps:
+            for metric in metrics:
+                num_ranks = num_ranks + 1
+                errors = []
+                for f in versions:
+                    r = f.get_result(scene, spp)
+                    if not r:
+                        continue
+                    v = getattr(r, metric.name)
+                    errors.append((f, v))
+                errors = sorted(errors, key=lambda p: p[1], reverse=not metric.lower_is_better)
+                for i, p in enumerate(errors):
+                    ranks[p[0]] = ranks[p[0]] + i + 1
+    if not ranks:
+        return
+    ranks = {f:(r/num_ranks) for f,r in ranks.items()}
+    table = [[v, f.get_name()] for f, v in ranks.items()]
+    table = sorted(table, key=lambda p: p[0])
+    table = [[str(r[0]), r[1]] for r in table]
+    print_table_simple(title, ['#', 'Technique'], table)
 
 
 class Config:
