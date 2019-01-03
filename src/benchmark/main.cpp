@@ -8,6 +8,7 @@
  */
 
 #include "BenchmarkManager.h"
+using namespace fbksd;
 
 #include <QCoreApplication>
 #include <QCommandLineParser>

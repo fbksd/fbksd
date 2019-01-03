@@ -24,7 +24,7 @@ public:
         QString name;
         QString path;
         QVector<int> spps;
-        SceneInfo info;
+        fbksd::SceneInfo info;
     };
 
     struct Renderer

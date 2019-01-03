@@ -14,6 +14,7 @@
 #include "exr_utils.h"
 #include "tcp_utils.h"
 #include "fbksd/renderer/samples.h"
+using namespace fbksd;
 
 #include <iostream>
 #include <memory>

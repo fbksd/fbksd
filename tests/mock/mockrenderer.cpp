@@ -9,6 +9,8 @@
 
 #include <fbksd/renderer/RenderingServer.h>
 #include <fbksd/renderer/samples.h>
+using namespace fbksd;
+
 #include <random>
 #include <iostream>
 #include <QCommandLineParser>

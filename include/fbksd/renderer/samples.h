@@ -15,6 +15,8 @@
 #include <set>
 #include <memory>
 
+namespace fbksd
+{
 
 /**
  * \defgroup RenderingServer Rendering Server Library
@@ -215,5 +217,7 @@ inline bool stringToFeature(const std::string& name, Feature* elel)
 }
 
 /**@}*/
+
+} // namespace fbksd
 
 #endif

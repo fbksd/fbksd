@@ -1,5 +1,6 @@
 #include "fbksd/core/SharedMemory.h"
 #include <QtTest>
+using namespace fbksd;
 
 
 class TestSharedMemory : public QObject

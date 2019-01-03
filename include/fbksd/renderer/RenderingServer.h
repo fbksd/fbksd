@@ -19,6 +19,8 @@
 
 namespace rpc { class server; }
 
+namespace fbksd
+{
 
 /**
  * \defgroup RenderingServer Rendering Server Library
@@ -74,5 +76,7 @@ private:
 };
 
 /**@}*/
+
+} // namespace fbksd
 
 #endif // RENDERINGSERVER_H

@@ -11,6 +11,7 @@
 #include "BenchmarkManager.h"
 #include "version.h"
 #include <rpc/client.h>
+using namespace fbksd;
 
 
 RenderClient::RenderClient(int port):

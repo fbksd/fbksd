@@ -15,6 +15,8 @@
 #include <cstdint>
 #include <rpc/msgpack.hpp>
 
+namespace fbksd
+{
 
 /**
  * \brief The SceneInfo class gives information about the scene being rendered.
@@ -70,5 +72,7 @@ private:
     std::map<std::string, bool> boolMap;
     std::map<std::string, std::string> stringMap;
 };
+
+} // namespace fbksd
 
 #endif

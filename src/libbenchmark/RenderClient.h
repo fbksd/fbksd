@@ -15,9 +15,12 @@
 #include <vector>
 #include <string>
 
-class BenchmarkManager;
 namespace rpc { class client; }
 
+namespace fbksd
+{
+
+class BenchmarkManager;
 
 /**
  * \brief The RenderClient class is used by the BenchmarkManager to communicate with a rendering server
@@ -73,5 +76,6 @@ private:
     std::unique_ptr<rpc::client> m_client;
 };
 
+} // namespace fbksd
 
 #endif

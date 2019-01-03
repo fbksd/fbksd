@@ -15,6 +15,8 @@
 #include <set>
 #include <rpc/msgpack.hpp>
 
+namespace fbksd
+{
 
 /**
    \brief The SampleLayout class permits to specify the layout of the samples in memory.
@@ -149,7 +151,8 @@ private:
     std::vector<ParameterEntry> parameters;
 };
 
-MSGPACK_ADD_ENUM(SampleLayout::ElementIO);
+} // namespace fbksd
 
+MSGPACK_ADD_ENUM(fbksd::SampleLayout::ElementIO);
 
 #endif

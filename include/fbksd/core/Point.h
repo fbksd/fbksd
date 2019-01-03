@@ -87,6 +87,6 @@ struct TPoint3
 
 using Point2l = TPoint2<int64_t>;
 
-} // nameapce fbksd
+} // namespace fbksd
 
 #endif // POINT_H

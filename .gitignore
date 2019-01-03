@@ -4,6 +4,7 @@ CMakeLists.txt.user*
 *.vscode
 
 # Doxygen build folder:
-doxygen
+doxygen/html
+doxygen/latex
 
 *__pycache__

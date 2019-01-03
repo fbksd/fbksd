@@ -13,6 +13,8 @@
 #include "fbksd/renderer/samples.h"
 #include "fbksd/core/SampleLayout.h"
 
+namespace fbksd
+{
 
 // This is need for the next classes due to the static members
 #define EXPORT_LIB __attribute__((visibility("default")))
@@ -93,5 +95,7 @@ private:
     static std::vector<std::pair<int, int>> m_outputFeatureIndices;
     float* m_currentSamplePtr;
 };
+
+} // namespace fbksd
 
 #endif // SAMPLESPIPE_H

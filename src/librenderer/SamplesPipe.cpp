@@ -8,6 +8,7 @@
  */
 
 #include "fbksd/renderer/SamplesPipe.h"
+using namespace fbksd;
 
 
 // ======================================================

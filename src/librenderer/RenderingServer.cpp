@@ -9,10 +9,12 @@
 
 #include "fbksd/renderer/RenderingServer.h"
 #include "version.h"
+using namespace fbksd;
 
 #include <rpc/server.h>
 #include <rpc/this_server.h>
 #include <iostream>
+
 
 struct RenderingServer::Imp
 {

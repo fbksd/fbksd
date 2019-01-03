@@ -21,6 +21,9 @@
 #include <QProcess>
 #include <QEventLoop>
 
+namespace fbksd
+{
+
 class BenchmarkServer;
 
 
@@ -105,5 +108,7 @@ private:
     int m_currentRenderingTime = 0;
     bool m_passiveMode = false;
 };
+
+} // namespace fbksd
 
 #endif // BENCHMARKMANAGER_H

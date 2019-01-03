@@ -11,7 +11,7 @@
 #include "BenchmarkManager.h"
 #include "version.h"
 #include <rpc/server.h>
-
+using namespace fbksd;
 
 
 BenchmarkServer::BenchmarkServer():

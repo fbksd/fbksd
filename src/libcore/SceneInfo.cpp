@@ -9,6 +9,7 @@
 
 #include "fbksd/core/SceneInfo.h"
 #include <iostream>
+using namespace fbksd;
 
 
 #define SceneInfo_NEW_TYPE(type, map) \

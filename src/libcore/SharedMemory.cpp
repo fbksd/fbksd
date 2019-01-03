@@ -15,6 +15,7 @@
 #include <unistd.h>
 #include <sys/statvfs.h>
 #include <iostream>
+using namespace fbksd;
 
 
 SharedMemory::SharedMemory() = default;

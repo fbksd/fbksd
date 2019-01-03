@@ -13,8 +13,12 @@
 #include "fbksd/core/definitions.h"
 #include <functional>
 
-class BenchmarkManager;
 namespace rpc { class server; }
+
+namespace fbksd
+{
+
+class BenchmarkManager;
 
 /**
  * \defgroup BenchmarkServer Benchmark Server Application
@@ -61,6 +65,8 @@ private:
 };
 
 /**@}*/
+
+} // namespace fbksd
 
 #endif // BENCHMARKSERVER
 

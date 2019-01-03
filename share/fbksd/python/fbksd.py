@@ -1069,6 +1069,7 @@ def cmd_serve(args):
 #=============================================
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(prog='fbksd', description='fbksd system cli interface.')
+    parser.add_argument('--version', action='version', version='%(prog)s version 1.0.0')
     subparsers = parser.add_subparsers(title='subcommands')
 
     # init

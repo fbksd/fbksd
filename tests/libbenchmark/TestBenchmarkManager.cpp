@@ -1,5 +1,6 @@
 #include "BenchmarkManager.h"
 #include <QtTest>
+using namespace fbksd;
 
 
 class TestBenchmarkManager : public QObject

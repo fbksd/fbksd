@@ -8,6 +8,7 @@
  */
 
 #include "fbksd/core/SampleLayout.h"
+using namespace fbksd;
 
 
 SampleLayout &SampleLayout::operator()(const std::string &name, ElementIO io)

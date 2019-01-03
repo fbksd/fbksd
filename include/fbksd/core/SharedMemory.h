@@ -12,6 +12,8 @@
 
 #include <string>
 
+namespace fbksd
+{
 
 /**
  * \brief The SharedMemory class provides shared memory access.
@@ -108,5 +110,7 @@ private:
     std::string m_customError;
     void* m_mem = nullptr;
 };
+
+} // namespace fbksd
 
 #endif // SHAREDMEMORY_H
