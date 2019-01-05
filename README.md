@@ -56,11 +56,14 @@ tmpfs            32G   29M   32G   1% /dev/shm
 After installing the dependencies, just run your normal cmake build/install procedure:
 
 ```
+$ git clone --recursive https://github.com/fbksd/fbksd.git
 $ cd fbksd
 $ mkdir build && cd build
 $ cmake -DCMAKE_BUILD_TYPE=Release ../
 $ make install
 ```
+
+**NOTE**: This repository uses git submodules. Use `--recursive` when cloning it.
 
 ## Creating a Workspace
 
