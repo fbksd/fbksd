@@ -639,7 +639,7 @@ def cmd_run(args):
     load_filters_g()
     load_samplers_g()
     config_filename = '/tmp/benchmark_config.json'
-    config = writeTempConfig(config_filename, current_config, renderers_dir, g_renderers, scenes_dir, g_scenes_names)
+    config = write_tmp_config(config_filename, current_config, renderers_dir, g_renderers, scenes_dir, g_scenes_names)
     if not config:
         print('Nothing to run.')
     print('Running configuration \'' + current_config_name(current_config) + '\'\n')
@@ -1074,9 +1074,9 @@ if __name__ == "__main__":
 
     # init
     parserInit = subparsers.add_parser('init', formatter_class=RawTextHelpFormatter,
-        help='Creates an empty workspace in the current directory.',
+        help='Initialize a workspace in the current directory.',
         description=
-            'Creates an empty workspace in the current directory.\n\n'
+            'Initialize a workspace in the current directory.\n\n'
             'A workspace is the folder where all the renderers, techniques, and benchmarking data is kept.\n'
             'You should always call \'fbksd\' having a workspace as working directory.')
     parserInit.add_argument('--slot-name', help='Name of the result slot (default: \"Results 1\")')
@@ -1242,8 +1242,8 @@ if __name__ == "__main__":
             'Compute errors for the saved result images.\n\n'
             'This action should be performed after running a benchmark.\n'
             'By default, only results for the current config are computed. You can compute all the results\n'
-            'in the workspace using the \'--all\' option.')
-    parserResultsCompute.add_argument('--all', action='store_true', help='Compute all results available in the workspace.')
+            'in the slot using the \'--all\' option.')
+    parserResultsCompute.add_argument('--all', action='store_true', help='Compute all results available in the slot.')
     parserResultsCompute.add_argument('--overwrite', action='store_true', dest='overwrite', help='Overwrite previous results.')
     parserResultsCompute.set_defaults(func=cmd_results_compute)
     ## results show
@@ -1252,8 +1252,8 @@ if __name__ == "__main__":
         description=
             'Show results.\n\n'
             'By default, only errors metrics for the current config are shown. You can show all the results\n'
-            'in the workspace using the \'--all\' options, and also specify individual error metrics.')
-    parserResultsShow.add_argument('--all', action='store_true', help='Show all results available in the workspace.')
+            'in the slot using the \'--all\' options, and also specify individual error metrics.')
+    parserResultsShow.add_argument('--all', action='store_true', help='Show all results available in the slot.')
     parserResultsShow.add_argument('--ssim', action='store_true', help='Show ssim error.')
     parserResultsShow.add_argument('--mse', action='store_true', help='Shows mse error.')
     parserResultsShow.add_argument('--psnr', action='store_true', help='Shows psnr error.')
@@ -1285,7 +1285,7 @@ if __name__ == "__main__":
             '│ scene 2 │ spp 1 │    e9       │    e10   │    e11      │    e12   │\n'
             '│         │ spp 2 │    e13      │    e14   │    e15      │    e16   │\n\n'
             'By default, only results for the current config are included.\n'
-            'You can use the option \'--all\' to include all results available in the workspace.')
+            'You can use the option \'--all\' to include all results available in the slot.')
     parserResultsExportCSV.add_argument('--all', action='store_true', help='Include all available results.')
     parserResultsExportCSV.add_argument('--ssim', action='store_true', help='Include ssim error.')
     parserResultsExportCSV.add_argument('--mse', action='store_true', help='Includes mse error.')
@@ -1342,7 +1342,7 @@ if __name__ == "__main__":
             'Export the results and the visualization page.\n\n'
             'The exported page can be statically served by any webserver.\n'
             'By default, only results for the current config are included.\n'
-            'You can use the option \'--all\' to include all results available in the workspace.')
+            'You can use the option \'--all\' to include all results available in the slot.')
     parserPageExport.add_argument('dest', metavar='DEST', help='Destination folder.')
     parserPageExport.add_argument('--all', action='store_true', help='Export all available results.')
     parserPageExport.add_argument('--overwrite', action='store_true', help='Overwrites DEST if it already exists.')
@@ -1356,7 +1356,7 @@ if __name__ == "__main__":
             'The update consists in scanning all computed results and generating the set of files used by\n'
             'the visualization page.\n'
             'By default, only results for the current config are included.\n'
-            'You can use the option \'--all\' to include all results available in the workspace.\n\n'
+            'You can use the option \'--all\' to include all results available in the slot.\n\n'
             'This action is performed automatically when you run a \'serve\' or \'results compute\'')
     parserPageUpdate.add_argument('--all', action='store_true', help='Include all available results.')
     parserPageUpdate.set_defaults(func=cmd_page_update)

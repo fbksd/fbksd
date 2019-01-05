@@ -37,18 +37,13 @@ namespace fbksd
 class SPP
 {
 public:
-    explicit SPP(int64_t value):
-        m_value(value)
-    {}
+    explicit SPP(int64_t value);
 
-    int64_t operator=(int64_t v)
-    { m_value = v; }
+    int64_t operator=(int64_t v);
 
-    void setValue(int64_t v)
-    { m_value = v; }
+    void setValue(int64_t v);
 
-    int64_t getValue() const
-    { return m_value; }
+    int64_t getValue() const;
 
 private:
     int64_t m_value = 0;
@@ -58,11 +53,10 @@ private:
 /**
  * \brief The BenchmarkClient class is used to communicate with the benchmark server.
  *
- * This class provides query methods that permit to get information about the scene, get samples, end send the final result.
- * Only one instance of this class should be created in your program.
+ * This class provides query methods that allows a technique to get information about the scene,
+ * request samples to be rendered, end send the final result.
  *
- * A simple use case for a non-adaptive reconstruction technique is the following:
- * \snippet BenchmarkClient_snippet.cpp 4
+ * Only one instance of this class should be created in your program.
  */
 class BenchmarkClient
 {
@@ -74,10 +68,12 @@ public:
      *
      * If you pass the argc and argv parameters from main(), the following command-line options
      * become available:
+     *
      *     --fbksd-renderer "<renderer_exec> <renderer_args> ..."
-     *         Starts the renderer process with the given arguments.
+     *       Starts the renderer process with the given arguments.
      *     --fbksd-spp <value>
-     *         Sets the sample budget available to client.
+     *       Sets the sample budget available to client.
+     *
      * This allows you to run your client program directly (for debugging purposes, for example).
      */
     BenchmarkClient(int argc = 0, char* argv[] = nullptr);
@@ -91,8 +87,12 @@ public:
     /**
      * \brief Get information about the scene being rendered.
      *
-     * Gets information about the scene being rendered,
-     * allowing you to configure your technique accordingly.
+     * The more important information are:
+     * - image dimensions (width and height);
+     * - maximum number of samples available.
+     *
+     * This information allows you to configure your technique accordingly.
+     * See SceneInfo for more details.
      *
      * \return SceneInfo
      */
@@ -100,6 +100,11 @@ public:
 
     /**
      * \brief Sets the sample layout.
+     *
+     * The layout is the way to inform the FBKSD server
+     * what data your technique requires for each sample, and how the data should
+     * be laid out in memory.
+     * Common data includes, for example, color RGB and (x,y) image plane position.
      *
      * This method should be called just once.
      */
@@ -114,7 +119,7 @@ public:
      * To pass `INPUT` samples, the user should write them in the buffer before
      * calling evaluateSamples().
      *
-     * BenchmarkClient owns the buffer: the user should not delete it manually.
+     * @note BenchmarkClient owns the buffer: do not delete.
      */
     float* getSamplesBuffer();
 
@@ -124,31 +129,36 @@ public:
      * The user should write the final reconstructed image to this buffer before calling
      * sendResult();
      *
-     * BenchmarkClient owns the buffer: the user should not delete it manually.
+     * The layout of the image in memory follows a scan-line pixel order:
+     * matrix of pixels with `width` columns, and `height` lines, with each pixel having
+     * R, G, and B values, in this order.
+     *
+     * @note BenchmarkClient owns the buffer: do not delete.
      */
     float* getResultBuffer();
 
     /**
-     * \brief Evaluate samples.
+     * \brief Request samples.
      *
      * The samples are written to the buffer returned by getSamplesBuffer().
      *
      * `numSamples` should not exceed the maximum allowed sample budget.
      *
-     * The unit changes the distribution of the generated sample positions. When `unit == SAMPLES`,
+     * Note that since `numSamples` can be less then the number of pixels,
      * there is no guarantee that all pixels are covered by samples.
      *
-     * When the sample layout has input elements, they should be passed in the corresponding positions in samples buffer.
+     * When the sample layout has input elements, they should be passed in the corresponding
+     * positions in the samples buffer.
      *
-     * \param[in] unit          The unit used to count samples
-     * \param[in] numSamples    The number of samples (according to unit)
+     * @returns Number of returned samples.
      */
     int64_t evaluateSamples(int64_t numSamples);
 
     /**
-     * @brief Overloaded method.
+     * @brief Request samples.
      *
-     * Evaluates an amount of samples given as a multiple of the number of pixels in the image (samples-per-pixel).
+     * This is an overloaded method that accepts the number of samples in SPP.
+     * The spp value is a multiple of the number of pixels in the image (samples-per-pixel).
      *
      * @returns Number of evaluated samples (not in SPP).
      */
@@ -156,6 +166,8 @@ public:
 
     /**
      * \brief Sends the final result (rgb image)
+     *
+     * Calling this method is must be the last method you do before you exiting.
      */
     void sendResult();
 

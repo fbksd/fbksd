@@ -13,6 +13,7 @@ endfunction(add_exec_test)
 add_subdirectory(mock)
 
 add_exec_test(TestSharedMemory core/TestSharedMemory.cpp)
+add_exec_test(TestSceneInfo core/TestSceneInfo.cpp)
 
 add_exec_test(TestBenchmarkClient libclient/TestBenchmarkClient.cpp
     fbksd::client fbksd::libbenchmark

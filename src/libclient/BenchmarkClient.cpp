@@ -56,6 +56,33 @@ void startProcess(const QString& execPath, const QStringList& args, QProcess* pr
 }
 
 
+// ======================================================
+// SPP
+// ======================================================
+SPP::SPP(int64_t value):
+    m_value(value)
+{}
+
+int64_t SPP::operator=(int64_t v)
+{
+    m_value = v;
+    return v;
+}
+
+void SPP::setValue(int64_t v)
+{
+    m_value = v;
+}
+
+int64_t SPP::getValue() const
+{
+    return m_value;
+}
+
+
+// ======================================================
+// BenchmarkClient
+// ======================================================
 struct BenchmarkClient::Imp
 {
     Imp(int argc, char* argv[]):

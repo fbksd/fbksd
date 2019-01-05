@@ -79,7 +79,7 @@ def load_renderers(renderers_dir):
                 data = json.load(f)
                 r = Renderer()
                 r.name = data['name']
-                r.path = data['exec']
+                r.path = os.path.join(os.path.split(file)[0], data['exec'])
                 r.is_ready = os.path.isfile(os.path.join(os.path.dirname(file), r.path))
                 renderers[r.name] = r
     return renderers
@@ -143,9 +143,6 @@ def save_scenes_file(scenes, current_slot_dir):
 
 
 def load_techniques(techniques_dir, techique_factory, technique_version_factory):
-    # load all available denoisers
-    # assumes folder name == filter name == executable name
-
     g_filters = {}
     g_filters_names = {}
     g_filters_versions = {}
@@ -162,7 +159,7 @@ def load_techniques(techniques_dir, techique_factory, technique_version_factory)
             with open(os.path.join(techniques_dir, filter_name, 'info.json')) as info_file:
                 filter_info = json.load(info_file)
             f = techique_factory()
-            f.name = filter_name
+            f.name = filter_info['short_name']
             f.full_name = filter_info['full_name']
             f.comment = filter_info['comment']
             f.citation = filter_info['citation']
@@ -172,8 +169,8 @@ def load_techniques(techniques_dir, techique_factory, technique_version_factory)
                     version.technique = f
                     version.tag = v['name']
                     version.message = v['comment']
-                    version.executable = v['executable']
-                    if os.path.isfile(os.path.join(techniques_dir, filter_name, v['executable'])):
+                    version.executable = os.path.join(techniques_dir, filter_name, v['executable'])
+                    if os.path.isfile(version.executable):
                         version.status = 'ready'
                     else:
                         version.status = 'not compiled'
@@ -187,8 +184,8 @@ def load_techniques(techniques_dir, techique_factory, technique_version_factory)
                     version.message = filter_info['comment']
                 else:
                     version.message = 'Default version'
-                version.executable = f.name
-                if os.path.isfile(os.path.join(techniques_dir, filter_name, filter_name)):
+                version.executable = os.path.join(techniques_dir, filter_name, f.name)
+                if os.path.isfile(version.executable):
                     version.status = 'ready'
                 else:
                     version.status = 'not compiled'
@@ -208,8 +205,6 @@ def load_filters(filters_dir):
 
 
 def load_samplers(samplers_dir):
-    # load all available samplers
-    # assumes folder name == sampler name == executable name
     def sample_factory():
         return Sampler()
     def sample_version_factory():
@@ -472,14 +467,7 @@ def new_config(scenes, filters, samplers, spps):
     return root_node
 
 
-def writeTempConfig(config_filename, current_config, renderers_dir, renderers_g, scenes_dir, scenes_names_g):
-    # scenes = scenesFromIds(arg_scenes, g_scenes)
-    # if not scenes:
-    #     return [], ''
-    # if arg_spps:
-    #     arg_spps = list(set(arg_spps))
-    #     arg_spps.sort()
-
+def write_tmp_config(config_filename, current_config, renderers_dir, renderers_g, scenes_dir, scenes_names_g):
     with open(current_config) as f:
         config = json.load(f)
 
@@ -490,7 +478,7 @@ def writeTempConfig(config_filename, current_config, renderers_dir, renderers_g,
 
     for renderer in config['renderers']:
         renderer_obj = [r for r in renderers_g.values() if r.name == renderer['name']][0]
-        path = os.path.join(renderers_dir, renderer_obj.name, renderer_obj.path)
+        path = os.path.join(renderers_dir, renderer_obj.path)
         renderer['path'] = os.path.abspath(path)
         for scene in renderer['scenes']:
             scene_obj = scenes_names_g[scene['name']]
@@ -530,7 +518,7 @@ def run_techniques(benchmark_exec, techniques_prefix, techiques, g_techiques_nam
             version = [ver for ver in filt.versions if ver.tag == v][0]
             print('Benchmarking: {}'.format(version.get_name()))
             out_folder = os.path.join(slot_prefix, filt.name, version.tag)
-            filter_exec = os.path.join(techniques_prefix, filt.name, version.executable)
+            filter_exec = version.executable
             benchmark_args = [benchmark_exec, '--config', config_filename, '--filter', filter_exec, '--output', out_folder]
             if not overwrite:
                 benchmark_args.append('--resume')
@@ -692,6 +680,7 @@ def print_table(table_title, rows_title, cols_title, rows_labels, cols_labels, d
 
 
 def print_results(versions, scenes, metrics):
+    no_results = True
     names = [f.get_name() for f in versions]
     for scene in scenes:
         if type(scene) == Scene:
@@ -716,6 +705,10 @@ def print_results(versions, scenes, metrics):
                         table_has_results = True
             if table_has_results:
                 print_table(scene.get_name(), ' ', metric, names, spps_names, data)
+                no_results = False
+
+    if no_results:
+        print('No results.')
 
 
 def print_csv(scenes, versions, metrics, mse_scale, rmse_scale):
@@ -991,7 +984,7 @@ def rank_techniques(title, scenes, versions, metrics):
                 errors = sorted(errors, key=lambda p: p[1], reverse=not metric.lower_is_better)
                 for i, p in enumerate(errors):
                     ranks[p[0]] = ranks[p[0]] + i + 1
-    if not ranks:
+    if num_ranks == 0:
         return
     ranks = {f:(r/num_ranks) for f,r in ranks.items()}
     table = [[v, f.get_name()] for f, v in ranks.items()]

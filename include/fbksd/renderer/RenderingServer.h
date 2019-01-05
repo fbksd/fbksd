@@ -29,12 +29,10 @@ namespace fbksd
 
 
 /**
- * \brief The RenderingServer class implements the server by which a rendering system provides sampling
- * computations to the benchmark system.
+ * \brief Implements the server that provides samples and scene information to FBKSD.
  *
- * This class provides an asynchronous communication interface using signals. Each time a request is received,
- * the appropriate signal is emitted.
- *
+ * this class uses a callback mechanism. The renderer should provide the appropriate
+ * callback functions that will be called when the client makes the corresponding request.
  */
 class RenderingServer
 {
@@ -48,6 +46,9 @@ public:
     using Finish
         = std::function<void()>;
 
+    /**
+     * @brief Creates a rendering server.
+     */
     RenderingServer();
 
     RenderingServer(const RenderingServer&) = delete;
@@ -56,14 +57,64 @@ public:
 
     ~RenderingServer();
 
+    /**
+     * @brief Sets the GetSceneInfo callback.
+     *
+     * The callback is called when the client asks for scene information.
+     * The callback should return a SceneInfo object.
+     *
+     * Callback signature:
+     * \code{.cpp}
+     * SceneInfo callback();
+     * \endcode
+     */
     void onGetSceneInfo(const GetSceneInfo& callback);
 
+    /**
+     * @brief Sets the SetParameters callback.
+     *
+     * The callback is called when the client sets the sample layout.
+     * The sample layout is passed to the callback.
+     *
+     * Callback signature:
+     * \code{.cpp}
+     * void callback(const SampleLayout& layout);
+     * \endcode
+     */
     void onSetParameters(const SetParameters& callback);
 
+    /**
+     * @brief Sets the EvaluateSamples callback.
+     *
+     * The callback is called every time the client asks for samples to be rendered.
+     * The parameters passed to the callback are:
+     * - spp: number of requested samples per pixel
+     * - remainingCount: an extra number of samples (not multiple of the number of pixels)
+     *
+     * The callback should return true on success.
+     *
+     * Callback signature:
+     * \code{.cpp}
+     * bool callback(int64_t spp, int64_t remainingCount);
+     * \endcode
+     */
     void onEvaluateSamples(const EvaluateSamples& callback);
 
+    /**
+     * @brief Sets the Finish callback.
+     *
+     * the callback is called when the client wants the renderer to finish and exit.
+     *
+     * Callback signature:
+     * \code{.cpp}
+     * void callback();
+     * \endcode
+     */
     void onFinish(const Finish& callback);
 
+    /**
+     * @brief run
+     */
     void run();
 
     RenderingServer& operator=(const RenderingServer&) = delete;

@@ -23,8 +23,12 @@ using namespace fbksd;
             return item->second; \
         } \
         return type(); \
+    } \
+    template<> \
+    bool SceneInfo::has<type>(const std::string &name) const { \
+        auto item = map.find(name); \
+        return item != map.end(); \
     }
-
 
 SceneInfo_NEW_TYPE(float, floatMap)
 SceneInfo_NEW_TYPE(int64_t, int64Map)
@@ -32,6 +36,7 @@ SceneInfo_NEW_TYPE(bool, boolMap)
 SceneInfo_NEW_TYPE(std::string, stringMap)
 
 
+// This is a overload for the int64Map accepting a int
 template<>
 void SceneInfo::set(const std::string &name, const int& value)
 {

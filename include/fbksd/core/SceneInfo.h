@@ -24,30 +24,40 @@ namespace fbksd
  * The SceneInfo class stores information about the scene being rendered.
  * You can use this information to tune the parameters of your algorithm.
  *
- * For example, to get the image size and to know if the scene has depth-of-field and motion blur,
+ * For example, to get the image size maximum number of samples,
  * you do the following:
  * \snippet SceneInfo_snippet.cpp 0
  *
- * The available query names are listed in the table below.
+ * The available query names are:
  *
-    | Query             | Type       |
-    | ------------------|------------|
-    | width             | int        |
-    | height            | int        |
-    | has_motion_blur   | bool       |
-    | has_dof           | bool       |
-    | max_samples       | int        |
-    | max_spp           | int        |
-    | shutter_open      | float      |
-    | shutter_close     | float      |
-
-    \ingroup Core
+ * | Query             | Type       |
+ * | ------------------|------------|
+ * | width             | int64_t    |
+ * | height            | int64_t    |
+ * | has_motion_blur   | bool       |
+ * | has_dof           | bool       |
+ * | max_samples       | int64_t    |
+ * | max_spp           | int64_t    |
+ * | shutter_open      | float      |
+ * | shutter_close     | float      |
+ *
+ * @note Not all query names are available for all scenes.
+ *
+ * \ingroup Core
  */
 class SceneInfo
 {
 public:
     /**
-     * \brief Get the a value with type T and key name, returns def if now found.
+     *	@brief Return bool if a info with the given name and type exists.
+     */
+    template<typename T>
+    bool has(const std::string& name) const;
+
+    /**
+     * \brief Get the a info with the given type and name.
+     *
+     * If the info doesn't exist, returns T().
      */
     template<typename T>
     T get(const std::string& name) const;
