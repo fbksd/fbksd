@@ -14,7 +14,7 @@ The C++ libraries provide the API needed to make techniques (samplers and denois
 benchmarked and compared.
 The libraries also support adapting renderers, which allow FBKSD to use them as rendering back-ends.
 
-If you have an existing technique that you want to run with FBKSD, take a look at the library [API reference](http(s)://fbksd.github.io/fbksd).
+If you have an existing technique that you want to run with FBKSD, take a look at the library [API reference](http(s)://fbksd.github.io/fbksd/docs/1.0.0).
 
 For details about the motivation and system architecture, refer to our paper: [A Framework for Developing and Benchmarking Sampling and Denoising Algorithms for Monte Carlo Rendering](http://www.inf.ufrgs.br/~oliveira/projects/FBKSD/FBKSD_page.html)
 
@@ -157,4 +157,4 @@ When the computation is finished, you can run a `fbksd page serve` to serve a vi
 
 ## API Reference
 
-The API reference for the release versions are published in: https://fbksd.github.io/fbksd 
+The API reference for release 1.0.0 can be accessed in: https://fbksd.github.io/fbksd/docs/1.0.0
