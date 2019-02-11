@@ -77,6 +77,7 @@ private:
         RENDERER_CRASH
     };
 
+    void allocateTilesMemory(int spp);
     void allocateResultShm(int64_t);
     ProcessExitStatus startEventLoop(QProcess* renderer, QProcess* asr);
     void startProcess(const QString& execPath, const QString& arg, QProcess& process);
@@ -85,7 +86,11 @@ private:
     // Methods used by the BenchmarkServer
     SceneInfo onGetSceneInfo();
     int onSetSampleLayout(const SampleLayout& layout);
-    int64_t onEvaluateSamples(bool isSPP, int64_t numSamples);
+    TilePkg onEvaluateSamples(bool isSPP, int64_t numSamples);
+    TilePkg onGetNextTile(int64_t prevTileIndex);
+    TilePkg onEvaluateInputSamples(bool isSPP, int64_t numSamples);
+    TilePkg onGetNextInputTile(int64_t prevTileIndex, bool prevWasInput);
+    void onLastTileConsumed(int64_t prevTileIndex);
     void onSendResult();
 
     std::unique_ptr<BenchmarkServer> m_benchmarkServer;
@@ -94,18 +99,18 @@ private:
     int m_currentSceneIndex = 0;
     int m_currentSppIndex = 0;
     int64_t m_currentSampleBudget = 0;
+    int m_currentSampleSize = 0;
+    int m_tileSize = 0;
     SceneInfo m_currentSceneInfo;
-    SharedMemory m_samplesMemory;
+    SharedMemory m_tilesMemory;
     SharedMemory m_resultMemory;
 
     QMetaObject::Connection m_rendererConnection;
     QMetaObject::Connection m_asrConnection;
 
     std::unique_ptr<RenderClient> m_renderClient;
-    QTime m_timer;
+    QTime m_timer; // tracks the technique execution time (accumulated in m_currentExecTime)
     int m_currentExecTime = 0;
-    QTime m_renderTimer;
-    int m_currentRenderingTime = 0;
     bool m_passiveMode = false;
 };
 

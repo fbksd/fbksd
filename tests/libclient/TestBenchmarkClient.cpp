@@ -61,27 +61,30 @@ private slots:
 
     void evaluateSamples()
     {
-        auto ncp = m_client->evaluateSamples(SPP(m_spp));
-        QCOMPARE(ncp, m_spp * m_width * m_height);
-
-        float* samples = m_client->getSamplesBuffer();
-        for(int64_t y = 0; y < m_height; ++y)
-        for(int64_t x = 0; x < m_width; ++x)
+        int64_t ncp = 0;
+        int spp = 4;
+        m_client->evaluateSamples(SPP(spp), [&](const BufferTile& tile)
         {
-            float* pixel =  &samples[y*m_width*m_spp*m_sampleSize + x*m_sampleSize*m_spp];
-            for(int64_t s = 0; s < m_spp; ++s)
-            for(int64_t c = 0; c < m_sampleSize; ++c)
+            for(auto y = tile.beginY(); y < tile.endY(); ++y)
+            for(auto x = tile.beginX(); x < tile.endX(); ++x)
             {
-                float v =  pixel[s*m_sampleSize + c];
-                float exp = getValue(x, y, s, c);
-                if(!qFuzzyCompare(v, exp))
+                ncp += spp;
+                float* pixel = tile(x, y, 0);
+                for(int64_t s = 0; s < spp; ++s)
+                for(int64_t c = 0; c < m_sampleSize; ++c)
                 {
-                    QWARN(QString("pixel = (%1, %2); sample = %3; component = %4")
-                          .arg(x).arg(y).arg(s).arg(c).toStdString().c_str());
-                    QCOMPARE(v, exp);
+                    float v =  pixel[s*m_sampleSize + c];
+                    float exp = getValue(x, y, s, c);
+                    if(!qFuzzyCompare(v, exp))
+                    {
+                        QWARN(QString("pixel = (%1, %2); sample = %3; component = %4")
+                              .arg(x).arg(y).arg(s).arg(c).toStdString().c_str());
+                        QCOMPARE(v, exp);
+                    }
                 }
             }
-        }
+        });
+        QCOMPARE(ncp, spp * m_width * m_height);
     }
 
     void cleanupTestCase()

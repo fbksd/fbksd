@@ -66,18 +66,18 @@ void setLayout(const SampleLayout& layout)
     g_layout = layout;
 }
 
-bool evaluateSamples(int64_t spp, int64_t remainingCount)
+bool evaluateSamples(int64_t spp, int64_t remainingCount, int)
 {
     g_spp = spp;
-    SamplesPipe pipe;
-    SampleBuffer sampleBuffer = pipe.getBuffer();
+
+    SamplesPipe pipe({0, 0}, {g_width, g_height}, spp * g_width * g_height);
 
     for(int64_t y = 0; y < g_height; ++y)
     for(int64_t x = 0; x < g_width; ++x)
     {
-        pipe.seek(x, y, spp, g_width);
         for(int64_t s = 0; s < spp; ++s)
         {
+            SampleBuffer sampleBuffer = pipe.getBuffer();
             int i = 0;
             sampleBuffer.set(IMAGE_X, getValue(x, y, s, i++));
             sampleBuffer.set(IMAGE_Y, getValue(x, y, s, i++));
@@ -127,19 +127,18 @@ bool evaluateSamples(int64_t spp, int64_t remainingCount)
     return true;
 }
 
-bool evaluateSamples1(int64_t spp, int64_t remainingCount)
+bool evaluateSamples1(int64_t spp, int64_t remainingCount, int)
 {
     g_spp = spp;
-    SamplesPipe pipe;
-    SampleBuffer sampleBuffer = pipe.getBuffer();
+
+    SamplesPipe pipe({0, 0}, {g_width, g_height}, spp * g_width * g_height);
 
     for(int64_t y = 0; y < g_height; ++y)
     for(int64_t x = 0; x < g_width; ++x)
     {
-        pipe.seek(x, y, spp, g_width);
         for(int64_t s = 0; s < spp; ++s)
         {
-            int i = 0;
+            SampleBuffer sampleBuffer = pipe.getBuffer();
             sampleBuffer.set(IMAGE_X, x);
             sampleBuffer.set(IMAGE_Y, y);
             sampleBuffer.set(LENS_U, rand());
@@ -231,6 +230,7 @@ int main(int argc, char* argv[])
     std::cout << "scene = " << scene << std::endl;
 
     RenderingServer server;
+    server.onGetTileSize([](){return g_width;});
     server.onGetSceneInfo(&getSceneInfo);
     server.onSetParameters(&setLayout);
     switch (scene)

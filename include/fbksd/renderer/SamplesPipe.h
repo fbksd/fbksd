@@ -12,6 +12,7 @@
 
 #include "fbksd/renderer/samples.h"
 #include "fbksd/core/SampleLayout.h"
+#include "fbksd/core/definitions.h"
 
 namespace fbksd
 {
@@ -110,19 +111,24 @@ class EXPORT_LIB SamplesPipe
 {
 public:
     /**
-     * @brief Creates a pipe for transferring samples.
+     * @brief Acquires a pipe for reading/writing samples.
+     *
+     * The constructor tries to acquires exclusive hold of a buffer tile. If no buffer tile is available,
+     * the constructor blocks until one is available.
+     *
+     * @param begin, end
+     * Define the window in the image where the pipe will cover.
+     * @param numSamples
+     * Number of samples that will be inserted in this pipe. The total number of samples
      */
-    SamplesPipe();
+    SamplesPipe(const Point2l& begin, const Point2l& end, int64_t numSamples);
+
+    SamplesPipe(SamplesPipe&& pipe);
 
     /**
-     * @brief Sets the pipe position.
-     *
-     * The pipe position is the position in the buffer where the next
-     * SampleBuffer insertion will take place.
-     *
-     * The total pipe size is sampleSize * width * height * numSamples.
+     * @brief Releases the pipe, signaling that the it's ready to be consumed by the client.
      */
-    void seek(size_t pos);
+    ~SamplesPipe();
 
     /**
      * @brief Sets the pipe position using (x, y) pixel position.
@@ -132,17 +138,18 @@ public:
      *
      * @param x, y
      * Pixel position.
-     * @param spp
-     * Samples per pixel.
-     * @param width
-     * Image width.
      */
-    void seek(int x, int y, int spp, int width);
+    void seek(int x, int y);
 
     /**
      * @brief Returns the current pipe position.
      */
-    size_t getPosition();
+    size_t getPosition() const;
+
+    /**
+     * @brief Returns the number of samples inserted so far.
+     */
+    size_t getNumSamples() const;
 
     /**
      * @brief Returns a SampleBuffer for the current pipe position.
@@ -159,16 +166,25 @@ public:
     SamplesPipe& operator<<(const SampleBuffer& buffer);
 
 private:
+    SamplesPipe(const SamplesPipe&) = delete;
+    SamplesPipe& operator=(const SamplesPipe&) = delete;
+
+    static void setLayout(const SampleLayout& layout);
+
     friend class RenderingServer;
-
-    static void init(const SampleLayout& layout, float* samplesBuffer);
-
-    static int64_t m_sampleSize;
-    static float* m_samples;
-    static std::vector<std::pair<int, int>> m_inputParameterIndices;
-    static std::vector<std::pair<int, int>> m_outputParameterIndices;
-    static std::vector<std::pair<int, int>> m_outputFeatureIndices;
+    friend class TilePool;
+    static int64_t sm_sampleSize;
+    static int64_t sm_numSamples;
+    static std::vector<std::pair<int, int>> sm_inputParameterIndices;
+    static std::vector<std::pair<int, int>> sm_outputParameterIndices;
+    static std::vector<std::pair<int, int>> sm_outputFeatureIndices;
+    float* m_samples;
     float* m_currentSamplePtr;
+    Point2l m_begin;
+    Point2l m_end;
+    int64_t m_width;
+    int64_t m_informedNumSamples = 0;
+    int64_t m_numSamples = 0;
 };
 
 } // namespace fbksd

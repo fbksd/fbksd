@@ -36,6 +36,10 @@ using namespace fbksd;
 namespace
 {
 
+// Maximum number of tiles the renderer can work on in parallel.
+// A tiles only become available once the client consumes it.
+constexpr int64_t NUM_TILES = 20;
+
 // Converts milliseconds to h:m:s:ms format
 void convertMillisecons(int time, int* h, int* m, int* s, int* ms)
 {
@@ -70,14 +74,26 @@ int64_t getInitSampleBudget(const SceneInfo& info)
 // BenchmarkManager
 // ==========================================================
 BenchmarkManager::BenchmarkManager():
-    m_samplesMemory("SAMPLES_MEMORY"),
+    m_tilesMemory("TILES_MEMORY"),
     m_resultMemory("RESULT_MEMORY")
 {
     m_benchmarkServer = std::make_unique<BenchmarkServer>();
-    m_benchmarkServer->onGetSceneInfo([this](){return onGetSceneInfo();} );
-    m_benchmarkServer->onSetParameters([this](const SampleLayout& layout){onSetSampleLayout(layout);});
-    m_benchmarkServer->onEvaluateSamples([this](bool isSpp, int numSamples){return onEvaluateSamples(isSpp, numSamples);});
-    m_benchmarkServer->onSendResult([this](){onSendResult();});
+    m_benchmarkServer->onGetSceneInfo([this]()
+        {return onGetSceneInfo();} );
+    m_benchmarkServer->onSetParameters([this](const SampleLayout& layout)
+        {onSetSampleLayout(layout);});
+    m_benchmarkServer->onEvaluateSamples([this](bool isSpp, int64_t numSamples)
+        {return onEvaluateSamples(isSpp, numSamples);});
+    m_benchmarkServer->onGetNextTile([this](int64_t index)
+        {return m_renderClient->getNextTile(index);});
+    m_benchmarkServer->onEvaluateInputSamples([this](bool isSpp, int64_t numSamples)
+        {return onEvaluateInputSamples(isSpp, numSamples);});
+    m_benchmarkServer->onGetNextInputTile([this](int64_t index, bool wasInput)
+        {return m_renderClient->getNextInputTile(index, wasInput);});
+    m_benchmarkServer->onLastTileConsumed([this](int64_t index)
+        {m_renderClient->lastTileConsumed(index);});
+    m_benchmarkServer->onSendResult([this]()
+        {onSendResult();});
 }
 
 BenchmarkManager::~BenchmarkManager() = default;
@@ -87,13 +103,13 @@ void BenchmarkManager::runPassive(int spp)
     m_passiveMode = true;
     m_benchmarkServer->run(/*2226*/);
     m_renderClient = std::make_unique<RenderClient>(2227);
+    m_tileSize = m_renderClient->getTileSize();
     m_currentSceneInfo = m_renderClient->getSceneInfo();
     m_currentSceneInfo.set<int64_t>("max_spp", spp);
     m_currentSceneInfo.set<int64_t>("max_samples", spp * getPixelCount(m_currentSceneInfo));
     allocateResultShm(getPixelCount(m_currentSceneInfo));
     m_currentSampleBudget = getInitSampleBudget(m_currentSceneInfo);
     m_currentExecTime = 0;
-    m_currentRenderingTime = 0;
     m_timer.start();
 }
 
@@ -109,14 +125,13 @@ void BenchmarkManager::runScene(const QString& rendererPath,
 
     // Start rendering server with the given scene
     QProcess renderingServer;
-#ifndef MANUAL_RENDERER
     startProcess(rendererPath, scenePath, renderingServer);
-#endif
 
     // Start the render client
     // FIXME: setting client port manually here. Maybe all renderers should use the same port anyway?
     waitPortOpen(2227);
     m_renderClient = std::make_unique<RenderClient>(2227);
+    m_tileSize = m_renderClient->getTileSize();
     m_currentSceneInfo = m_renderClient->getSceneInfo();
     if(spp)
     {
@@ -132,13 +147,10 @@ void BenchmarkManager::runScene(const QString& rendererPath,
         m_currentSampleBudget = getInitSampleBudget(m_currentSceneInfo);
         // Start benchmark client
         QProcess filterApp;
-#ifndef MANUAL_ASR
         startProcess(filterPath, "", filterApp);
-#endif
 
         m_currentExecTime = 0;
         m_timer.start();
-        m_currentRenderingTime = 0;
 
         exitType = startEventLoop(&renderingServer, &filterApp);
         if(exitType == FILTER_SUCCESS)
@@ -229,12 +241,11 @@ void BenchmarkManager::runAll(const QString& configPath,
                 if(startRenderer)
                 {
                     startRenderer = false;
-#ifndef MANUAL_RENDERER
                     startProcess(renderAtt.path, scene.path, renderingServer);
-#endif
                     // Start the render client
                     waitPortOpen(2227);
                     m_renderClient = std::make_unique<RenderClient>(2227);
+                    m_tileSize = m_renderClient->getTileSize();
                     m_currentSceneInfo = m_renderClient->getSceneInfo();
                     allocateResultShm(getPixelCount(m_currentSceneInfo));
                 }
@@ -257,12 +268,9 @@ void BenchmarkManager::runAll(const QString& configPath,
                     m_currentSampleBudget = sampleBudget;
                     // Start benchmark client
                     QProcess filterApp;
-#ifndef MANUAL_ASR
                     startProcess(filterPath, "", filterApp);
-#endif
                     m_currentExecTime = 0;
                     m_timer.start();
-                    m_currentRenderingTime = 0;
 
                     ProcessExitStatus exitType = startEventLoop(&renderingServer, &filterApp);
                     int spp = scene.spps[m_currentSppIndex];
@@ -317,6 +325,19 @@ void BenchmarkManager::runAll(const QString& configPath,
     }
 }
 
+void BenchmarkManager::allocateTilesMemory(int spp)
+{
+    auto tileSize = m_tileSize * m_tileSize * spp * m_currentSampleSize * NUM_TILES;
+    auto prevSize = m_tilesMemory.size();
+    auto newSize = tileSize * sizeof(float);
+    if(newSize > prevSize)
+    {
+        m_tilesMemory.detach();
+        if(!m_tilesMemory.create(newSize))
+            qDebug() << "Couldn't allocate tiles memory: " << m_tilesMemory.error().c_str();
+    }
+}
+
 SceneInfo BenchmarkManager::onGetSceneInfo()
 {
     m_currentExecTime += m_timer.elapsed();
@@ -341,42 +362,70 @@ int BenchmarkManager::onSetSampleLayout(const SampleLayout& layout)
         return INVALID_LAYOUT; // invalid layout
     }
 
-    auto prevSize = m_samplesMemory.size();
-    int64_t sampleSize = layout.getSampleSize();
-    auto newSize = m_currentSampleBudget * sampleSize * sizeof(float);
-    if(newSize > prevSize)
-    {
-        m_samplesMemory.detach();
-        m_renderClient->detachMemory();
-        if(!m_samplesMemory.create(newSize))
-        {
-            qDebug() << "Couldn't allocate samplesMemory: " << m_samplesMemory.error().c_str();
-            return SHARED_MEMORY_ERROR;
-        }
-    }
-
+    m_currentSampleSize = layout.getSampleSize();
     m_renderClient->setParameters(layout);
 
     m_timer.start();
     return OK;
 }
 
-int64_t BenchmarkManager::onEvaluateSamples(bool isSPP, int64_t numSamples)
+TilePkg BenchmarkManager::onEvaluateSamples(bool isSPP, int64_t numSamples)
 {
     m_currentExecTime += m_timer.elapsed();
 
     auto numPixels = getPixelCount(m_currentSceneInfo);
     auto numGenSamples = std::min(m_currentSampleBudget, isSPP ? numSamples * numPixels : numSamples);
     m_currentSampleBudget = m_currentSampleBudget - numGenSamples;
+    if(numGenSamples == 0)
+        return {};
 
     auto spp = numGenSamples / numPixels;
     auto remaining = numGenSamples % numPixels;
-    m_renderTimer.start();
-    m_renderClient->evaluateSamples(spp, remaining);
-    m_currentRenderingTime += m_renderTimer.elapsed();
+    allocateTilesMemory(std::max(spp, 1L));
+    TilePkg tilePkg = m_renderClient->evaluateSamples(spp, remaining);
 
     m_timer.start();
-    return numGenSamples;
+    return tilePkg;
+}
+
+TilePkg BenchmarkManager::onGetNextTile(int64_t prevTileIndex)
+{
+    m_currentExecTime += m_timer.elapsed();
+    m_timer.start();
+    return m_renderClient->getNextTile(prevTileIndex);
+}
+
+TilePkg BenchmarkManager::onEvaluateInputSamples(bool isSPP, int64_t numSamples)
+{
+    m_currentExecTime += m_timer.elapsed();
+
+    auto numPixels = getPixelCount(m_currentSceneInfo);
+    auto numGenSamples = std::min(m_currentSampleBudget, isSPP ? numSamples * numPixels : numSamples);
+    m_currentSampleBudget = m_currentSampleBudget - numGenSamples;
+    if(numGenSamples == 0)
+        return {};
+
+    auto spp = numGenSamples / numPixels;
+    auto remaining = numGenSamples % numPixels;
+    allocateTilesMemory(std::max(spp, 1L));
+    TilePkg tilePkg = m_renderClient->evaluateInputSamples(spp, remaining);
+
+    m_timer.start();
+    return tilePkg;
+}
+
+TilePkg BenchmarkManager::onGetNextInputTile(int64_t prevTileIndex, bool prevWasInput)
+{
+    m_currentExecTime += m_timer.elapsed();
+    m_timer.start();
+    return m_renderClient->getNextInputTile(prevTileIndex, prevWasInput);
+}
+
+void BenchmarkManager::onLastTileConsumed(int64_t prevTileIndex)
+{
+    m_currentExecTime += m_timer.elapsed();
+    m_renderClient->lastTileConsumed(prevTileIndex);
+    m_timer.start();
 }
 
 void BenchmarkManager::onSendResult()
@@ -384,16 +433,10 @@ void BenchmarkManager::onSendResult()
     m_currentExecTime += m_timer.elapsed();
     int h, m, s, ms;
     convertMillisecons(m_currentExecTime, &h, &m, &s, &ms);
-    qDebug("Filter execution time = %02d:%02d:%02d:%03d", h, m, s, ms);
-    convertMillisecons(m_currentRenderingTime, &h, &m, &s, &ms);
-    qDebug("Render execution time = %02d:%02d:%02d:%03d", h, m, s, ms);
+    qDebug("Execution time = %02d:%02d:%02d:%03d", h, m, s, ms);
 
     if(m_passiveMode)
         saveResult("result", false);
-
-#ifdef MANUAL_ASR
-    saveResult("result", false);
-#endif
 }
 
 void BenchmarkManager::allocateResultShm(int64_t pixelCount)
@@ -418,7 +461,6 @@ BenchmarkManager::ProcessExitStatus BenchmarkManager::startEventLoop(QProcess *r
     QEventLoop eventLoop;
     void (QProcess::*finishedSignal)(int, QProcess::ExitStatus) = &QProcess::finished;
 
-#ifndef MANUAL_RENDERER
     m_rendererConnection = QObject::connect(renderer, finishedSignal, [&](int, QProcess::ExitStatus status)
     {
         if(status == QProcess::CrashExit && asr->state() == QProcess::Running)
@@ -431,9 +473,7 @@ BenchmarkManager::ProcessExitStatus BenchmarkManager::startEventLoop(QProcess *r
             eventLoop.quit();
         }
     });
-#endif
 
-#ifndef MANUAL_ASR
     m_asrConnection = QObject::connect(asr, finishedSignal, [&](int exitCode, QProcess::ExitStatus status)
     {
         QObject::disconnect(m_rendererConnection);
@@ -449,7 +489,6 @@ BenchmarkManager::ProcessExitStatus BenchmarkManager::startEventLoop(QProcess *r
         }
         eventLoop.quit();
     });
-#endif
 
     eventLoop.exec();
     return exitType;
@@ -487,19 +526,12 @@ void BenchmarkManager::saveResult(const QString& filename, bool aborted)
         logObj["aborted"] = aborted;
         int h, m, s, ms;
         {
-            QJsonObject recTimeObj;
+            QJsonObject execTimeObj;
             int time = aborted ? 0 : m_currentExecTime;
-            recTimeObj["time_ms"] = time;
+            execTimeObj["time_ms"] = time;
             convertMillisecons(time, &h, &m, &s, &ms);
-            recTimeObj["time_str"] = QTime(h, m, s, ms).toString("hh:mm:ss.zzz");
-            logObj["reconstruction_time"] = recTimeObj;
-        }
-        {
-            QJsonObject renderingTimeObj;
-            renderingTimeObj["time_ms"] = m_currentRenderingTime;
-            convertMillisecons(m_currentRenderingTime, &h, &m, &s, &ms);
-            renderingTimeObj["time_str"] = QTime(h, m, s, ms).toString("hh:mm:ss.zzz");
-            logObj["rendering_time"] = renderingTimeObj;
+            execTimeObj["time_str"] = QTime(h, m, s, ms).toString("hh:mm:ss.zzz");
+            logObj["exec_time"] = execTimeObj;
         }
         QJsonDocument logDoc(logObj);
         file.write(logDoc.toJson());

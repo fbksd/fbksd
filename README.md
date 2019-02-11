@@ -14,7 +14,7 @@ The C++ libraries provide the API needed to make techniques (samplers and denois
 benchmarked and compared.
 The libraries also support adapting renderers, which allow FBKSD to use them as rendering back-ends.
 
-If you have an existing technique that you want to run with FBKSD, take a look at the library [API reference](http(s)://fbksd.github.io/fbksd/docs/1.0.0).
+If you have an existing technique that you want to run with FBKSD, take a look at the library [API reference](http(s)://fbksd.github.io/fbksd/docs/2.0.0).
 
 For details about the motivation and system architecture, refer to our paper: [A Framework for Developing and Benchmarking Sampling and Denoising Algorithms for Monte Carlo Rendering](http://www.inf.ufrgs.br/~oliveira/projects/FBKSD/FBKSD_page.html)
 
@@ -23,26 +23,7 @@ For details about the motivation and system architecture, refer to our paper: [A
 
 - fbksd was tested on Ubuntu 18.04, but it should work in any modern Linux distribution with a recent cmake version;
 - The file system must support symbolic links: e.g. EXT4;
-- FBKSD version 1.x.x needs plenty of RAM (at least 16 GB) and you'll need to increase the POSIX shared memory size limit (see below).
 
-### Increase The POSIX Shared Memory Size Limit
-
-By default, Linux systems limit the total amount of shared memory to 50% of the total systems' RAM. You need to set it to 100% adding this line to the `/etc/fstab` file:
-
-```
-tmpfs    /dev/shm    tmpfs    rw,nosuid,nodev,size=100%    0    0
-```
-
-After adding this line, reboot the system.
-
-You can check if the limit is correctly set to 100% using the command `df -h | egrep 'Size|/dev/shm'`.
-The printed `Size` value should read the same as the total RAM size in your system. Ex:
-
-```
-$ df -h | egrep 'Size|/dev/shm'
-Filesystem      Size  Used Avail Use% Mounted on
-tmpfs            32G   29M   32G   1% /dev/shm
-```
 
 ## Build and Install
 
@@ -56,21 +37,21 @@ tmpfs            32G   29M   32G   1% /dev/shm
 After installing the dependencies, just run your normal cmake build/install procedure:
 
 ```
-$ git clone --recursive https://github.com/fbksd/fbksd.git
+$ git clone --recurse-submodules https://github.com/fbksd/fbksd.git
 $ cd fbksd
 $ mkdir build && cd build
 $ cmake -DCMAKE_BUILD_TYPE=Release ../
 $ make install
 ```
 
-**NOTE**: This repository uses git submodules. Use `--recursive` when cloning it.
+**NOTE**: This repository uses git submodules. Use `--recurse-submodules` when cloning it.
 
 ## Creating a Workspace
 
 A workspace is a folder that contain the techniques, renderers, scenes, configurations, and results.
 It's also the working directory from where you'll run the `fbksd` CLI.
 
-To initialize a workspace, just create the workspace folder (let's call it `workspace`, by it can be any name) and call `fbksd init` from it:
+To initialize a workspace, just create the workspace folder (let's call it `workspace`) and call `fbksd init` from it:
 
 ```
 $ mkdir workspace && cd workspace
@@ -78,7 +59,7 @@ $ fbksd init
 ```
 
 To get you started, we provide a package containing several techniques, renderers, and scenes in a separate repository (https://github.com/fbksd/fbksd-package).
-This package should be installed in workspace.
+This package should be installed in the workspace.
 Follow the instructions on the [fbksd-package](https://github.com/fbksd/fbksd-package) repository.
 
 After the package in your workspace, you can list the filters, samplers and scenes using the `filters`, `samplers`, and `scenes` subcommands. Ex:
@@ -160,4 +141,4 @@ When the computation is finished, you can run a `fbksd page serve` to serve a vi
 
 ## API Reference
 
-The API reference for release 1.0.0 can be accessed in: https://fbksd.github.io/fbksd/docs/1.0.0
+The API reference for release 2.0.0 can be accessed in: https://fbksd.github.io/fbksd/docs/2.0.0

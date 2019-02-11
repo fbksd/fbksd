@@ -188,7 +188,6 @@ class TechniqueResult(BaseModel):
         self.scene = None
         self.spp = 0
         self.exec_time = 0
-        self.rendering_time = 0
         self.mse = 0.0
         self.psnr = 0.0
         self.ssim = 0.0

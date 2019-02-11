@@ -42,7 +42,8 @@ using namespace fbksd;
  * $ ipcs -m | awk '$6 == 0' | tr -s " " | cut -d " " -f 2 | xargs -L1 ipcrm -m
  */
 
-namespace{
+namespace
+{
 void startProcess(const QString& execPath, const QStringList& args, QProcess* process)
 {
     process->start(QFileInfo(execPath).absoluteFilePath(), args);
@@ -57,11 +58,27 @@ void startProcess(const QString& execPath, const QStringList& args, QProcess* pr
 
 
 // ======================================================
+// BufferTile
+// ======================================================
+BufferTile::BufferTile(int64_t x, int64_t ex, int64_t y, int64_t ey, int64_t sampleSize, int64_t spp, float *data):
+    m_x(x),
+    m_ex(ex),
+    m_y(y),
+    m_ey(ey),
+    m_size(sampleSize),
+    m_spp(spp),
+    m_data(data),
+    m_dataEnd(m_data + numPixels()*spp*sampleSize)
+{}
+
+
+// ======================================================
 // SPP
 // ======================================================
-SPP::SPP(int64_t value):
-    m_value(value)
-{}
+SPP::SPP(int64_t value)
+{
+    setValue(value);
+}
 
 int64_t SPP::operator=(int64_t v)
 {
@@ -71,6 +88,8 @@ int64_t SPP::operator=(int64_t v)
 
 void SPP::setValue(int64_t v)
 {
+    if(v < 0)
+        throw std::invalid_argument("SPP value should be >= 0.");
     m_value = v;
 }
 
@@ -86,7 +105,7 @@ int64_t SPP::getValue() const
 struct BenchmarkClient::Imp
 {
     Imp(int argc, char* argv[]):
-        m_samplesMemory("SAMPLES_MEMORY"),
+        m_tilesMemory("TILES_MEMORY"),
         m_resultMemory("RESULT_MEMORY")
     {
         if(argc != 0 && argv != nullptr)
@@ -160,16 +179,20 @@ struct BenchmarkClient::Imp
     {
         m_sceneInfo = m_client->call("GET_SCENE_DESCRIPTION").as<SceneInfo>();
         m_maxNumSamples = m_sceneInfo.get<int64_t>("max_samples");
+        m_numPixels = m_sceneInfo.get<int64_t>("width") * m_sceneInfo.get<int64_t>("height");
 
         if(!m_resultMemory.attach())
             throw std::runtime_error("Couldn't attach result shared memory:\n - " + m_resultMemory.error());
     }
 
     std::unique_ptr<rpc::client> m_client;
-    SharedMemory m_samplesMemory;
+    SharedMemory m_tilesMemory;
     SharedMemory m_resultMemory;
     SceneInfo m_sceneInfo;
     int64_t m_maxNumSamples = 0;
+    int64_t m_sampleSize = 0;
+    int64_t m_numPixels = 0;
+    bool m_hasInputSamples = false;
 
     //bypass mode
     std::unique_ptr<BenchmarkManager> m_bmkManager;
@@ -180,9 +203,6 @@ struct BenchmarkClient::Imp
 BenchmarkClient::BenchmarkClient(int argc, char* argv[]):
     m_imp(std::make_unique<Imp>(argc, argv))
 {
-    if(m_imp->m_samplesMemory.isAttached())
-        throw std::logic_error("Shared memory already attached.");
-
     m_imp->fetchSceneInfo();
 }
 
@@ -195,15 +215,9 @@ SceneInfo BenchmarkClient::getSceneInfo()
 
 void BenchmarkClient::setSampleLayout(const SampleLayout& layout)
 {
-   m_imp-> m_client->call("SET_SAMPLE_LAYOUT", layout);
-
-    if(!m_imp->m_samplesMemory.attach())
-        throw std::runtime_error("Couldn't attach samples shared memory:\n - " + m_imp->m_samplesMemory.error());
-}
-
-float *BenchmarkClient::getSamplesBuffer()
-{
-    return static_cast<float*>(m_imp->m_samplesMemory.data());
+    m_imp->m_sampleSize = layout.getSampleSize();
+    m_imp->m_hasInputSamples = layout.hasInput();
+    m_imp->m_client->call("SET_SAMPLE_LAYOUT", layout);
 }
 
 float *BenchmarkClient::getResultBuffer()
@@ -211,14 +225,164 @@ float *BenchmarkClient::getResultBuffer()
     return static_cast<float*>(m_imp->m_resultMemory.data());
 }
 
-int64_t BenchmarkClient::evaluateSamples(int64_t numSamples)
+void BenchmarkClient::evaluateSamples(SPP spp, const TileConsumer& consumer)
 {
-    return m_imp->m_client->call("EVALUATE_SAMPLES", false, numSamples).as<int64_t>();
+    if(m_imp->m_hasInputSamples)
+        throw std::logic_error("evaluateSamples() doesn't support input samples, use evaluateInputSamples().");
+
+    auto tilePkg = m_imp->m_client->call("EVALUATE_SAMPLES", true, spp.getValue()).as<TilePkg>();
+    m_imp->m_tilesMemory.detach();
+    if(!m_imp->m_tilesMemory.attach())
+        throw std::runtime_error("error attaching tilesMemory");
+
+    auto buffer = static_cast<float*>(m_imp->m_tilesMemory.data());
+    const auto& tile = tilePkg.tile;
+    int64_t tileIndex = tile.index;
+    float* tilePtr = &buffer[tileIndex];
+    BufferTile bufferTile(tile.window.begin.x,
+                          tile.window.end.x,
+                          tile.window.begin.y,
+                          tile.window.end.y,
+                          m_imp->m_sampleSize, spp.getValue(), tilePtr);
+    consumer(bufferTile);
+
+    bool hasNext = tilePkg.hasNext;
+    while(hasNext)
+    {
+        tilePkg = m_imp->m_client->call("GET_NEXT_TILE", tileIndex).as<TilePkg>();
+        const auto& tile = tilePkg.tile;
+        tileIndex = tile.index;
+        hasNext = tilePkg.hasNext;
+        tilePtr = &buffer[tileIndex];
+        BufferTile bufferTile(tile.window.begin.x,
+                              tile.window.end.x,
+                              tile.window.begin.y,
+                              tile.window.end.y,
+                              m_imp->m_sampleSize, spp.getValue(), tilePtr);
+        consumer(bufferTile);
+    }
+
+    m_imp->m_client->call("LAST_TILE_CONSUMED", tileIndex);
 }
 
-int64_t BenchmarkClient::evaluateSamples(SPP spp)
+void BenchmarkClient::evaluateSamples(int64_t numSamples, const TileConsumer2 &consumer)
 {
-    return m_imp->m_client->call("EVALUATE_SAMPLES", true, spp.getValue()).as<int64_t>();
+    if(numSamples <= 0)
+        return;
+    if(m_imp->m_hasInputSamples)
+        throw std::logic_error("evaluateSamples() doesn't support input samples, use evaluateInputSamples().");
+
+    auto tilePkg = m_imp->m_client->call("EVALUATE_SAMPLES", false, numSamples).as<TilePkg>();
+    if(!tilePkg.isValid)
+        return;
+
+    m_imp->m_tilesMemory.detach();
+    if(!m_imp->m_tilesMemory.attach())
+        throw std::runtime_error("error attaching tilesMemory");
+
+    auto buffer = static_cast<float*>(m_imp->m_tilesMemory.data());
+    const auto& tile = tilePkg.tile;
+    int64_t tileIndex = tile.index;
+    float* tilePtr = &buffer[tileIndex];
+    consumer(tilePkg.tile.numSamples, tilePtr);
+
+    bool hasNext = tilePkg.hasNext;
+    while(hasNext)
+    {
+        tilePkg = m_imp->m_client->call("GET_NEXT_TILE", tileIndex).as<TilePkg>();
+        const auto& tile = tilePkg.tile;
+        tileIndex = tile.index;
+        hasNext = tilePkg.hasNext;
+        tilePtr = &buffer[tileIndex];
+        consumer(tilePkg.tile.numSamples, tilePtr);
+    }
+
+    m_imp->m_client->call("LAST_TILE_CONSUMED", tileIndex);
+}
+
+void BenchmarkClient::evaluateInputSamples(SPP spp,
+                                           const TileProducer &producer,
+                                           const TileConsumer &consumer)
+{
+    auto tilePkg = m_imp->m_client->call("EVALUATE_INPUT_SAMPLES", true, spp.getValue()).as<TilePkg>();
+    if(!tilePkg.isValid)
+        return;
+
+    m_imp->m_tilesMemory.detach();
+    if(!m_imp->m_tilesMemory.attach())
+        throw std::runtime_error("error attaching tilesMemory");
+
+    auto buffer = static_cast<float*>(m_imp->m_tilesMemory.data());
+    const auto& tile = tilePkg.tile;
+    int64_t tileIndex = tile.index;
+    float* tilePtr = &buffer[tileIndex];
+    BufferTile bufferTile(tile.window.begin.x,
+                          tile.window.end.x,
+                          tile.window.begin.y,
+                          tile.window.end.y,
+                          m_imp->m_sampleSize, spp.getValue(), tilePtr);
+    producer(bufferTile);
+
+    bool hasNext = tilePkg.hasNext;
+    while(hasNext)
+    {
+        bool prevWasInput = tilePkg.isInputRequest;
+        tilePkg = m_imp->m_client->call("GET_NEXT_INPUT_TILE", tileIndex, prevWasInput).as<TilePkg>();
+        const auto& tile = tilePkg.tile;
+        tileIndex = tile.index;
+        hasNext = tilePkg.hasNext;
+        tilePtr = &buffer[tileIndex];
+        BufferTile bufferTile(tile.window.begin.x,
+                              tile.window.end.x,
+                              tile.window.begin.y,
+                              tile.window.end.y,
+                              m_imp->m_sampleSize, spp.getValue(), tilePtr);
+        if(tilePkg.isInputRequest)
+            producer(bufferTile);
+        else
+            consumer(bufferTile);
+    }
+
+    m_imp->m_client->call("LAST_TILE_CONSUMED", tileIndex);
+}
+
+void BenchmarkClient::evaluateInputSamples(int64_t numSamples,
+                                           const TileProducer2 &producer,
+                                           const TileConsumer2 &consumer)
+{
+    if(numSamples <= 0)
+        return;
+
+    auto tilePkg = m_imp->m_client->call("EVALUATE_INPUT_SAMPLES", false, numSamples).as<TilePkg>();
+    if(!tilePkg.isValid)
+        return;
+
+    m_imp->m_tilesMemory.detach();
+    if(!m_imp->m_tilesMemory.attach())
+        throw std::runtime_error("error attaching tilesMemory");
+
+    auto buffer = static_cast<float*>(m_imp->m_tilesMemory.data());
+    const auto& tile = tilePkg.tile;
+    int64_t tileIndex = tile.index;
+    float* tilePtr = &buffer[tileIndex];
+    producer(tilePkg.tile.numSamples, tilePtr);
+
+    bool hasNext = tilePkg.hasNext;
+    while(hasNext)
+    {
+        bool prevWasInput = tilePkg.isInputRequest;
+        tilePkg = m_imp->m_client->call("GET_NEXT_INPUT_TILE", tileIndex, prevWasInput).as<TilePkg>();
+        const auto& tile = tilePkg.tile;
+        tileIndex = tile.index;
+        hasNext = tilePkg.hasNext;
+        tilePtr = &buffer[tileIndex];
+        if(tilePkg.isInputRequest)
+            producer(tilePkg.tile.numSamples, tilePtr);
+        else
+            consumer(tilePkg.tile.numSamples, tilePtr);
+    }
+
+    m_imp->m_client->call("LAST_TILE_CONSUMED", tileIndex);
 }
 
 void BenchmarkClient::sendResult()

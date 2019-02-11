@@ -29,14 +29,14 @@ RenderClient::RenderClient(int port):
 
 RenderClient::~RenderClient() = default;
 
+int RenderClient::getTileSize()
+{
+    return m_client->call("GET_TILE_SIZE").as<int>();
+}
+
 SceneInfo RenderClient::getSceneInfo()
 {
     return m_client->call("GET_SCENE_DESCRIPTION").as<SceneInfo>();
-}
-
-void RenderClient::detachMemory()
-{
-    m_client->call("DETACH_MEMORY");
 }
 
 void RenderClient::setParameters(const SampleLayout& layout)
@@ -44,9 +44,29 @@ void RenderClient::setParameters(const SampleLayout& layout)
     m_client->call("SET_PARAMETERS", layout);
 }
 
-bool RenderClient::evaluateSamples(int64_t spp, int64_t remainintCount)
+TilePkg RenderClient::evaluateSamples(int64_t spp, int64_t remainintCount)
 {
-    return m_client->call("EVALUATE_SAMPLES", spp, remainintCount).as<bool>();
+    return m_client->call("EVALUATE_SAMPLES", spp, remainintCount).as<TilePkg>();
+}
+
+TilePkg RenderClient::getNextTile(int64_t prevTileIndex)
+{
+    return m_client->call("GET_NEXT_TILE", prevTileIndex).as<TilePkg>();
+}
+
+TilePkg RenderClient::evaluateInputSamples(int64_t spp, int64_t remainingCount)
+{
+    return m_client->call("EVALUATE_INPUT_SAMPLES", spp, remainingCount).as<TilePkg>();
+}
+
+TilePkg RenderClient::getNextInputTile(int64_t prevTileIndex, bool prevWasInput)
+{
+    return m_client->call("GET_NEXT_INPUT_TILE", prevTileIndex, prevWasInput).as<TilePkg>();
+}
+
+void RenderClient::lastTileConsumed(int64_t prevTileIndex)
+{
+    m_client->call("LAST_TILE_CONSUMED", prevTileIndex);
 }
 
 void RenderClient::finishRender()

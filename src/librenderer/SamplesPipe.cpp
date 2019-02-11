@@ -8,7 +8,9 @@
  */
 
 #include "fbksd/renderer/SamplesPipe.h"
+#include "TilePool.h"
 using namespace fbksd;
+#include <cassert>
 
 
 // ======================================================
@@ -71,57 +73,85 @@ void SampleBuffer::setLayout(const SampleLayout& layout)
 // ======================================================
 
 // Static initialization
-int64_t SamplesPipe::m_sampleSize = 0;
-float* SamplesPipe::m_samples = nullptr;
-std::vector<std::pair<int, int>> SamplesPipe::m_inputParameterIndices;
-std::vector<std::pair<int, int>> SamplesPipe::m_outputParameterIndices;
-std::vector<std::pair<int, int>> SamplesPipe::m_outputFeatureIndices;
+int64_t SamplesPipe::sm_sampleSize = 0;
+int64_t SamplesPipe::sm_numSamples = 0;
+std::vector<std::pair<int, int>> SamplesPipe::sm_inputParameterIndices;
+std::vector<std::pair<int, int>> SamplesPipe::sm_outputParameterIndices;
+std::vector<std::pair<int, int>> SamplesPipe::sm_outputFeatureIndices;
 
-SamplesPipe::SamplesPipe():
-    m_currentSamplePtr(m_samples)
+
+SamplesPipe::SamplesPipe(const Point2l &begin, const Point2l &end, int64_t numSamples):
+    m_begin(begin),
+    m_end(end),
+    m_width(end.x - begin.x),
+    m_informedNumSamples(numSamples)
 {
+    m_samples = m_currentSamplePtr = TilePool::getFreeTile(begin, end, numSamples);
 }
 
-void SamplesPipe::seek(size_t pos)
+SamplesPipe::SamplesPipe(SamplesPipe &&pipe)
 {
-    m_currentSamplePtr = m_samples + pos;
+    m_samples = pipe.m_samples;
+    m_currentSamplePtr = pipe.m_currentSamplePtr;
+    m_begin = pipe.m_begin;
+    m_end = pipe.m_end;
+    m_width = pipe.m_width;
+    pipe.m_samples = pipe.m_currentSamplePtr = nullptr;
 }
 
-void SamplesPipe::seek(int x, int y, int spp, int width)
+SamplesPipe::~SamplesPipe()
 {
-    size_t index = size_t(x)*m_sampleSize*spp + size_t(y)*m_sampleSize*spp*width;
+    TilePool::releaseWorkedTile(*this);
+}
+
+void SamplesPipe::seek(int x, int y)
+{
+    assert(m_begin.x <= x);
+    assert(x < m_end.x);
+    assert(m_begin.y <= y);
+    assert(y < m_end.y);
+    auto index = int64_t(x - m_begin.x) * sm_sampleSize * sm_numSamples +
+                 int64_t(y - m_begin.y) * sm_sampleSize * sm_numSamples * m_width;
     m_currentSamplePtr = &m_samples[index];
 }
 
-size_t SamplesPipe::getPosition()
+size_t SamplesPipe::getPosition() const
 {
     return m_currentSamplePtr - m_samples;
+}
+
+size_t SamplesPipe::getNumSamples() const
+{
+    return m_numSamples;
 }
 
 SampleBuffer SamplesPipe::getBuffer()
 {
     SampleBuffer buffer;
-    for(const auto& pair: m_inputParameterIndices)
+    for(const auto& pair: sm_inputParameterIndices)
         buffer.m_paramentersBuffer[pair.first] = m_currentSamplePtr[pair.second];
     return buffer;
 }
 
 SamplesPipe& SamplesPipe::operator<<(const SampleBuffer& buffer)
 {
-    for(const auto& pair: m_outputParameterIndices)
+    for(const auto& pair: sm_outputParameterIndices)
         m_currentSamplePtr[pair.second] = buffer.m_paramentersBuffer[pair.first];
-    for(const auto& pair: m_outputFeatureIndices)
+    for(const auto& pair: sm_outputFeatureIndices)
         m_currentSamplePtr[pair.second] = buffer.m_featuresBuffer[pair.first];
-    m_currentSamplePtr += m_sampleSize;
+    m_currentSamplePtr += sm_sampleSize;
+    ++m_numSamples;
     return *this;
 }
 
-void SamplesPipe::init(const SampleLayout& layout, float* samplesBuffer)
+void SamplesPipe::setLayout(const SampleLayout& layout)
 {
     SampleBuffer::setLayout(layout);
-    m_sampleSize = layout.getSampleSize();
-    m_samples = samplesBuffer;
+    sm_sampleSize = layout.getSampleSize();
 
+    sm_inputParameterIndices.clear();
+    sm_outputParameterIndices.clear();
+    sm_outputFeatureIndices.clear();
     for(size_t i = 0; i < layout.parameters.size(); ++i)
     {
         auto &par = layout.parameters[i];
@@ -129,9 +159,9 @@ void SamplesPipe::init(const SampleLayout& layout, float* samplesBuffer)
         if(stringToRandomParameter(par.name, &p))
         {
             if(par.io == SampleLayout::INPUT)
-                m_inputParameterIndices.emplace_back(p, i);
+                sm_inputParameterIndices.emplace_back(p, i);
             else
-                m_outputParameterIndices.emplace_back(p, i);
+                sm_outputParameterIndices.emplace_back(p, i);
         }
         else
         {
@@ -139,7 +169,7 @@ void SamplesPipe::init(const SampleLayout& layout, float* samplesBuffer)
             if(stringToFeature(par.name, &f))
             {
                 f = toNumbered(f, par.number);
-                m_outputFeatureIndices.emplace_back(f, i);
+                sm_outputFeatureIndices.emplace_back(f, i);
             }
         }
     }

@@ -79,6 +79,15 @@ bool SampleLayout::hasInput(const std::string &name) const
     return false;
 }
 
+bool SampleLayout::hasInput() const
+{
+    for(const auto& e: parameters)
+        if(e.io == INPUT)
+            return true;
+
+    return false;
+}
+
 bool SampleLayout::isValid(const std::set<std::string> &reference) const
 {
     std::set<std::string> counter;

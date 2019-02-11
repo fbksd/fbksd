@@ -31,18 +31,22 @@ namespace fbksd
 /**
  * \brief Implements the server that provides samples and scene information to FBKSD.
  *
- * this class uses a callback mechanism. The renderer should provide the appropriate
+ * This class uses a callback mechanism. The renderer should provide the appropriate
  * callback functions that will be called when the client makes the corresponding request.
  */
 class RenderingServer
 {
 public:
+    using GetTileSize
+        = std::function<int()>;
     using GetSceneInfo
         = std::function<SceneInfo()>;
     using SetParameters
         = std::function<void(const SampleLayout& layout)>;
     using EvaluateSamples
-        = std::function<bool(int64_t spp, int64_t remainingCount)>;
+        = std::function<void(int64_t spp, int64_t remainingCount, int pipeSize)>;
+    using LastTileConsumed
+        = std::function<void()>;
     using Finish
         = std::function<void()>;
 
@@ -56,6 +60,13 @@ public:
     RenderingServer(RenderingServer&&) = default;
 
     ~RenderingServer();
+
+    /**
+     * @brief Sets the GetTileSize callback.
+     *
+     * The callback is called just once when the renderer is started.
+     */
+    void onGetTileSize(const GetTileSize& callback);
 
     /**
      * @brief Sets the GetSceneInfo callback.
@@ -90,6 +101,7 @@ public:
      * The parameters passed to the callback are:
      * - spp: number of requested samples per pixel
      * - remainingCount: an extra number of samples (not multiple of the number of pixels)
+     * - pipeSize: maximum number of samples allowable when creating a SamplesPipe.
      *
      * The callback should return true on success.
      *
@@ -99,6 +111,13 @@ public:
      * \endcode
      */
     void onEvaluateSamples(const EvaluateSamples& callback);
+
+    /**
+     * @brief Sets the LastTileConsumed callback.
+     *
+     * The callback is called when the client consumes the last tile.
+     */
+    void onLastTileConsumed(const LastTileConsumed& callback);
 
     /**
      * @brief Sets the Finish callback.

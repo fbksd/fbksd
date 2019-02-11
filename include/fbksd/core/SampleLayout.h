@@ -125,12 +125,19 @@ public:
      */
     bool hasInput(const std::string& name) const;
 
+    /**
+     * \brief Checks if any element is INPUT.
+     */
+    bool hasInput() const;
+
     MSGPACK_DEFINE_ARRAY(parameters)
 private:
     friend class SampleAdapter;
     friend class SampleBuffer;
     friend class SamplesPipe;
     friend class BenchmarkManager;
+    friend class TileSamplesPipe;
+    friend class TilePool;
 
     bool isValid(const std::set<std::string>& reference) const;
 

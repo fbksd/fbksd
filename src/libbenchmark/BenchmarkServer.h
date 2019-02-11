@@ -36,7 +36,13 @@ public:
     using SetParameters
         = std::function<void(const SampleLayout& layout)>;
     using EvaluateSamples
-        = std::function<int(bool isSPP, int64_t numSamples)>;
+        = std::function<TilePkg(bool isSPP, int64_t numSamples)>;
+    using GetNextTile
+        = std::function<TilePkg(int64_t prevTileIndex)>;
+    using GetNextInputTile
+        = std::function<TilePkg(int64_t prevTileIndex, bool prevWasInput)>;
+    using LastTileConsumed
+        = std::function<void(int64_t tileIndex)>;
     using SendResult
         = std::function<void()>;
 
@@ -50,6 +56,14 @@ public:
 
     void onEvaluateSamples(const EvaluateSamples& callback);
 
+    void onGetNextTile(const GetNextTile& callback);
+
+    void onEvaluateInputSamples(const EvaluateSamples& callback);
+
+    void onGetNextInputTile(const GetNextInputTile& callback);
+
+    void onLastTileConsumed(const LastTileConsumed& callback);
+
     void onSendResult(const SendResult& callback);
 
     void run();
@@ -61,6 +75,8 @@ private:
     bool m_getSceneInfoSet = false;
     bool m_setParametersSet = false;
     bool m_evalSamplesSet = false;
+    bool m_getNextTile = false;
+    bool m_lastTileConsumed = false;
     bool m_sendResultSet = false;
 };
 

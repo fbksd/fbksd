@@ -41,6 +41,28 @@ void BenchmarkServer::onEvaluateSamples(const EvaluateSamples& callback)
     m_server->bind("EVALUATE_SAMPLES", callback);
 }
 
+void BenchmarkServer::onGetNextTile(const GetNextTile &callback)
+{
+    m_getNextTile = true;
+    m_server->bind("GET_NEXT_TILE", callback);
+}
+
+void BenchmarkServer::onEvaluateInputSamples(const EvaluateSamples &callback)
+{
+    m_server->bind("EVALUATE_INPUT_SAMPLES", callback);
+}
+
+void BenchmarkServer::onGetNextInputTile(const GetNextInputTile &callback)
+{
+    m_server->bind("GET_NEXT_INPUT_TILE", callback);
+}
+
+void BenchmarkServer::onLastTileConsumed(const LastTileConsumed &callback)
+{
+    m_lastTileConsumed = true;
+    m_server->bind("LAST_TILE_CONSUMED", callback);
+}
+
 void BenchmarkServer::onSendResult(const SendResult& callback)
 {
     m_sendResultSet = true;
@@ -56,6 +78,10 @@ void BenchmarkServer::run()
         missingFunc += "SetParameters ";
     if(!m_evalSamplesSet)
         missingFunc += "EvaluateSamples ";
+    if(!m_getNextTile)
+        missingFunc += "GetNextTile ";
+    if(!m_lastTileConsumed)
+        missingFunc += "LastTileConsumed ";
     if(!m_sendResultSet)
         missingFunc += "SendResult";
     if(!missingFunc.empty())

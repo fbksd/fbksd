@@ -55,17 +55,37 @@ struct Tile
 {
     Tile() = default;
 
-    Tile(const CropWindow& w, int i, int n):
+    Tile(const CropWindow& w, int64_t i, int64_t n):
         window(w),
         index(i),
         numSamples(n)
     {}
 
     CropWindow window;
-    int index = 0;
-    int numSamples = 0;
+    int64_t index = 0;
+    int64_t numSamples = 0;
 
     MSGPACK_DEFINE_ARRAY(window, index, numSamples)
+};
+
+
+struct TilePkg
+{
+    TilePkg() = default;
+
+    TilePkg(const Tile& tile, bool hasNext, bool isInputRequest = false):
+        tile(tile),
+        isValid(true),
+        hasNext(hasNext),
+        isInputRequest(isInputRequest)
+    {}
+
+    Tile tile;
+    bool isValid = false;
+    bool hasNext = false;
+    bool isInputRequest = false;
+
+    MSGPACK_DEFINE_ARRAY(tile, isValid, hasNext, isInputRequest)
 };
 
 /**@}*/

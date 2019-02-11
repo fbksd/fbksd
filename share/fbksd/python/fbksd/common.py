@@ -297,8 +297,7 @@ def load_techniques_results(techniques, g_scenes, techniques_dir, result_factory
                     with open(main_log_filename) as log_file:
                         log_data = json.load(log_file)
                         result.aborted = log_data['aborted']
-                        result.exec_time = log_data['reconstruction_time']['time_ms']
-                        result.rendering_time = log_data['rendering_time']['time_ms']
+                        result.exec_time = log_data['exec_time']['time_ms']
                     with open(errors_log_filename) as log_file:
                         log_data = json.load(log_file)
                         result.mse = log_data['mse']
@@ -345,7 +344,6 @@ def save_techniques_result_file(filepath, scenes_by_id, g_filters, versions_ids)
                     'spp': result.spp,
                     'filter_version_id': result.filter_version.id,
                     'exec_time': result.exec_time,
-                    'rendering_time': result.rendering_time,
                     'mse': result.mse,
                     'psnr': result.psnr,
                     'ssim': result.ssim,
@@ -879,7 +877,6 @@ def load_saved_results(results_dir):
                 if result.spp not in result.scene.spps:
                     result.scene.spps.append(result.spp)
                 result.exec_time = r['exec_time']
-                result.rendering_time = r['rendering_time']
                 result.mse = r['mse']
                 result.psnr = r['psnr']
                 result.ssim = r['ssim']
@@ -908,7 +905,6 @@ def load_saved_results(results_dir):
                 if result.spp not in result.scene.spps:
                     result.scene.spps.append(result.spp)
                 result.exec_time = r['exec_time']
-                result.rendering_time = r['rendering_time']
                 result.mse = r['mse']
                 result.psnr = r['psnr']
                 result.ssim = r['ssim']

@@ -35,17 +35,17 @@ public:
     ~RenderClient();
 
     /**
+     * @brief Queries the renderer for its tile size.
+     */
+    int getTileSize();
+
+    /**
      * \brief Requests scene information from the rendering system. This information is obtained from the
      * current scene being rendered.
      *
      * \return SceneInfo
      */
     SceneInfo getSceneInfo();
-
-    /**
-     * \brief Detaches shared memory
-     */
-    void detachMemory();
 
     /**
      * \brief Informs the sample layout required by the ASR technique.
@@ -56,16 +56,16 @@ public:
 
     /**
      * \brief Compute the samples values for the given samples positions.
-     *
-     * \param[in] isSPP         Flag indicating the unit of `numSamples`.
-     * \param[in] numSamples    Number of samples.
-     * \param[in] inSize        Number of features in the samples array.
-     * \param[in] samples       Input sample values.
-     * \param[in] outSize       Number of features in the output array.
-     * \param[out] output       Output sample values.
-     * \return Number of samples evaluated.
      */
-    bool evaluateSamples(int64_t spp, int64_t remainintCount);
+    TilePkg evaluateSamples(int64_t spp, int64_t remainingCount);
+
+    TilePkg getNextTile(int64_t prevTileIndex);
+
+    TilePkg evaluateInputSamples(int64_t spp, int64_t remainingCount);
+
+    TilePkg getNextInputTile(int64_t prevTileIndex, bool prevWasInput);
+
+    void lastTileConsumed(int64_t prevTileIndex);
 
     /**
      * \brief Finishes the rendering system for the current scene.
