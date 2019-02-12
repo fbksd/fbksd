@@ -152,7 +152,7 @@ def cmd_init(args):
 
 
 def cmd_config(args):
-    check = check_configs(configs_dir) and check_current_config(current_config)
+    check = check_configs(configs_dir)
     if not check:
         return
 
