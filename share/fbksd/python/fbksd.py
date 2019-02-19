@@ -196,14 +196,14 @@ def cmd_config_new(args):
     load_filters_g()
     filters = []
     if args.filters_all:
-        filters = g_filters.values()
+        filters = g_filters_versions.values()
     else:
         filters = techniqueVersionsFromIds(args.filters, g_filters_versions)
 
     load_samplers_g()
     samplers = []
     if args.samplers_all:
-        samplers = g_samplers.values()
+        samplers = g_samplers_versions.values()
     else:
         samplers = techniqueVersionsFromIds(args.samplers, g_samplers_versions)
 
