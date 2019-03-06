@@ -1,14 +1,20 @@
-This is the 2.0.0 API documentation for FBKSD.
+# FBKSD 2.1.0 API
+
+## Table of Contents
+
+- [Developing a Denoising Technique](#developing-a-denoising-technique) 
+- [Developing an Image Quality Assessment Metric](#developing-an-image-quality-assessment-metric) 
+- [Porting a Renderer](#porting-a-renderer)
 
 
 ## Developing a Denoising Technique
 
-For developing denoising or samplers, see the fbksd::BenchmarkClient class. It contains the main API used to communicate with the benchmark server.
+For developing denoisers or samplers, see the fbksd::BenchmarkClient class. It contains the main API used to communicate with the benchmark server.
 
 The code below shows a simple box filter implemented using the client API.
 
 ```cpp
-#include "fbksd/client/BenchmarkClient.h"
+#include <fbksd/client/BenchmarkClient.h>
 using namespace fbksd;
 
 int main(int argc, char* argv[])
@@ -60,61 +66,91 @@ int main(int argc, char* argv[])
     return 0;
 }
 ```
+The easiest way of compiling the code is using cmake. Just use `find_package(fbksd)` and link your target with `fbksd::client`.
 
-After you compile your technique, the executable should be placed in the `<workspace>/denoisers/<technique name>` directory, alongside a `info.json` file containing information about your technique.
-
-```json
-{
-    "short_name": "Box",
-    "full_name": "Box filter",
-    "comment": "A simple box reconstruction filter.",
-    "citation": "",
-}
-```
-
-> **Note**: In the `info.json` above, the system assumes that the executable for the technique has the same name as the `"short_name"` field.
-
-If your technique has more the one variant (e.g. with different approaches for a certain step of the technique, for example), you can add the different versions like in the example below:
-
-```json
-{
-    "short_name": "LBF",
-    "full_name": "A Machine Learning Approach for Filtering Monte Carlo Noise",
-    "comment": "Based on the original source code provided by the authors.",
-    "citation": "Kalantari, N.K., Bako, S., and Sen, P. 2015. A machine learning approach for filtering Monte Carlo noise. ACM Transactions on Graphics 34, 4, 122:1-122:12.",
-    "versions": [
-        {
-            "name": "default",
-            "comment": "Based on the original source code provided by the authors",
-            "executable": "LBF"
-        },
-        {
-            "name": "mf",
-            "comment": "This version uses features from the first non-specular intersection point",
-            "executable": "LBF-mf"
-        }
-    ]
-}
-```
-
-> **NOTE:** The `"name"` field in the version entry (except the `"default"` one) will be appended to the `"short_name"` field to form name of the technique when displaying it in the `fbksd` CLI or in the results visualization page.
 Ex:
-```
-$ fbksd filters
-Id   Name                Status    
----------------------------------------------------------------------------
-...
-11   LBF                 ready     
-12   LBF-mf              ready     
-...
----------------------------------------------------------------------------
+
+```cmake
+find_package(fbksd REQUIRED)
+set(CMAKE_CXX_STANDARD 11)
+
+add_executable(MyFilter main.cpp)
+target_link_libraries(MyFilter fbksd::client)
 ```
 
+> **Note**: C++ standard 11 or superior is required. 
 
-Once the executable and the `info.json` file are installed in the workspace, the command `fbksd filters` should now list your technique. You can then add it to a config and run it.
+After you compile your technique, the executable should be placed in the `<workspace>/denoisers/<technique name>` directory, alongside a `info.json` file containing information about your technique (see instructions in the [main repository page](https://github.com/fbksd/fbksd)).
 
 
-## Porting a Renderer to FBKSD
+## Developing an Image Quality Assessment Metric
+
+FBKSD provides an API that allows implementing IQA metrics to be used by the system. The library is called `fbksd-iqa` and is composed of two classes: fbksd::IQA and fbksd::Img.
+
+The code bellow is an example of MSE IQA metric using OpenCV.
+
+```cpp
+#include <fbksd/iqa/iqa.h>
+
+#include <opencv2/core/core.hpp>
+#include <opencv2/highgui/highgui.hpp>
+#include <opencv2/imgproc/imgproc.hpp>
+using namespace cv;
+
+static float computeMSE(const Mat& img1, const Mat& img2)
+{
+    Mat s1;
+    absdiff(img1, img2, s1);
+    s1 = s1.mul(s1);
+    Scalar s = sum(s1);
+    double sse = s.val[0] + s.val[1] + s.val[2];
+    double mse  = sse / (double)(img1.channels() * img1.total());
+    return mse;
+}
+
+int main(int argc, char* argv[])
+{
+    // STEP 1: Create an instance of fbksd::IQA, passing the required information.
+    fbksd::IQA iqa(argc, argv,                             // argc, argv from main()
+                   "My-MSE",                               // Metric's acronym 
+                   "My Simple Mean squared error metric",  // Metric's full name
+                   "",                                     // Reference (optional)
+                   true,                                   // lowerIsBetter flag
+                   false);                                 // hasErrorMap flag
+    fbksd::Img ref;
+    fbksd::Img test;
+    // STEP 2: Load the input images.
+    iqa.loadInputImages(ref, test);
+
+    // STEP 3: Compute the IQA value comparing the two images.
+    Mat refMat(ref.height(), ref.width(), CV_32FC3, ref.data());
+    Mat testMat(ref.height(), ref.width(), CV_32FC3, test.data());
+    float error = computeMSE(refMat, testMat);
+
+    // STEP 4: Report the value (and the error map, if supported).
+    iqa.report(error);
+    return 0;
+}
+```
+
+To compile your metric using cmake, just use `find_package(fbksd)` and link your target with `fbksd::iqa`.
+
+Ex:
+
+```cmake
+find_package(fbksd REQUIRED)
+set(CMAKE_CXX_STANDARD 11)
+
+add_executable(MyMetric main.cpp)
+target_link_libraries(MyMetric fbksd::iqa)
+```
+
+> **Note**: C++ standard 11 or superior is required. 
+
+The compiled IQA technique should be placed inside sub-folder of `<workspace>/iqa/`, alongside a `info.json` file with the metadata about the metric (see instructions in the [main repository page](https://github.com/fbksd/fbksd)).
+
+
+## Porting a Renderer
 
 Porting renderers to be used as rendering back-ends is a bit more complex.
 The main classes of interest are: fbksd::RenderingServer, fbksd::SamplesPipe and fbksd::SampleBuffer.
@@ -258,7 +294,21 @@ int main(int argc, char* argv[])
 }
 ```
 
-After you renderer is compiled, the executable should be placed in the `<workspace>/renderers/<renderer name>` directory, alongside a `info.json` file containing information about your technique.
+To compile the renderer using cmake, just use `find_package(fbksd)` and link your target with `fbksd::renderer`.
+
+Ex:
+
+```cmake
+find_package(fbksd REQUIRED)
+set(CMAKE_CXX_STANDARD 11)
+
+add_executable(MyRenderer main.cpp)
+target_link_libraries(MyRenderer fbksd::renderer)
+```
+
+> **Note**: C++ standard 11 or superior is required. 
+
+After you renderer is compiled, the executable should be placed in the `<workspace>/renderers/<renderer name>` directory, alongside a `info.json` file containing information about your the renderer.
 
 ```json
 {
@@ -266,3 +316,4 @@ After you renderer is compiled, the executable should be placed in the `<workspa
     "exec": "<renderer executable>"
 }
 ```
+Scenes for the new renderer should be placed in the `<workspace>/scenes/<renderer name>` directory, with corresponding reference images in the required formats (see instructions in the [main repository page](https://github.com/fbksd/fbksd)).

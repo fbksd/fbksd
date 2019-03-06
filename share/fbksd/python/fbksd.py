@@ -18,6 +18,7 @@ import itertools
 import time
 import http.server
 import socketserver
+import re
 # local imports
 from fbksd.common import *
 
@@ -29,6 +30,7 @@ scenes_dir         = os.path.join(os.getcwd(), 'scenes')
 renderers_dir      = os.path.join(os.getcwd(), 'renderers')
 denoisers_dir      = os.path.join(os.getcwd(), 'denoisers')
 samplers_dir       = os.path.join(os.getcwd(), 'samplers')
+iqa_metrics_dir    = os.path.join(os.getcwd(), 'iqa')
 configs_dir        = os.path.join(os.getcwd(), 'configs')
 current_config     = os.path.join(configs_dir, '.current.json')
 page_dir           = os.path.join(os.getcwd(), '.page')
@@ -51,12 +53,14 @@ g_samplers_versions = {}
 g_renderers = {}
 g_scenes = {}
 g_scenes_names = {}
+g_iqa_metrics = {}
 g_persistent_state = None
 g_scenes_loaded = False
 g_filters_loaded = False
 g_samplers_loaded = False
 g_results_loaded = False
 g_samplers_results_loaded = False
+g_iqa_metrics_loaded = False
 
 
 def load_scenes_g():
@@ -84,15 +88,22 @@ def load_samplers_g():
 def load_results_g():
     global g_filters, g_scenes, g_results_loaded
     if not g_results_loaded:
-        load_filters_results(g_filters, g_scenes, current_slot_dir)
+        load_filters_results(g_filters, g_scenes, g_iqa_metrics, current_slot_dir)
         g_results_loaded = True
 
 
 def load_samplers_results_g():
     global g_samplers, g_scenes, g_samplers_results_loaded
     if not g_samplers_results_loaded:
-        load_samplers_results(g_samplers, g_scenes, current_slot_dir)
+        load_samplers_results(g_samplers, g_scenes, g_iqa_metrics, current_slot_dir)
         g_samplers_results_loaded = True
+
+
+def load_metrics_g():
+    global g_iqa_metrics, g_iqa_metrics_loaded
+    if not g_iqa_metrics_loaded:
+        g_iqa_metrics = load_iqa_metrics(iqa_metrics_dir)
+        g_iqa_metrics_loaded = True
 
 
 def save_scenes_file_g(scenes):
@@ -130,6 +141,9 @@ def cmd_init(args):
     if not os.path.isdir(samplers_dir):
         os.mkdir(samplers_dir)
 
+    if not os.path.isdir(iqa_metrics_dir):
+        os.mkdir(iqa_metrics_dir)
+
     if not os.path.isdir(configs_dir):
         os.mkdir(configs_dir)
 
@@ -149,6 +163,12 @@ def cmd_init(args):
                 print('ERROR: \"{}\" is not an existing directory.\n'.format(args.scenes_dir))
         else:
             os.mkdir(scenes_dir)
+
+    # install build-in IQA metrics
+    save_native_iqa(os.path.join(iqa_metrics_dir, 'MSE'), 'fbksd-mse')
+    save_native_iqa(os.path.join(iqa_metrics_dir, 'RMSE'), 'fbksd-rmse')
+    save_native_iqa(os.path.join(iqa_metrics_dir, 'PSNR'), 'fbksd-psnr')
+    save_native_iqa(os.path.join(iqa_metrics_dir, 'SSIM'), 'fbksd-ssim')
 
 
 def cmd_config(args):
@@ -478,6 +498,7 @@ def cmd_page_update(args):
     load_scenes_g()
     load_filters_g()
     load_samplers_g()
+    load_metrics_g()
     load_results_g()
     load_samplers_results_g()
 
@@ -495,6 +516,7 @@ def cmd_page_update(args):
         filters_ids = [v.id for v in config.filter_versions]
         samplers_ids = [v.id for v in config.sampler_versions]
 
+    save_iqa_metrics(g_iqa_metrics, current_slot_dir)
     save_scenes_file_g(scenes)
     save_filters_file_g(scenes, filters_ids)
     save_samplers_file_g(scenes, samplers_ids)
@@ -624,6 +646,19 @@ def cmd_scenes(args):
     print('{0:75s}'.format('-'*75))
 
 
+def cmd_metrics(args):
+    metrics = load_iqa_metrics(iqa_metrics_dir)
+    if not metrics:
+        print('No IQA metrics.')
+        return
+    print('-'*60)
+    print('{0:<10}{1:<50s}'.format('Acronym', 'Name'))
+    print('-'*60)
+    for key, metric in metrics.items():
+        print('{0:<10s}{1:<50s}'.format(key, metric.name))
+    print('-'*60)
+
+
 def cmd_run(args):
     check = check_configs(configs_dir) and \
             check_current_config(current_config) and \
@@ -682,8 +717,8 @@ def cmd_results_compute(args):
     load_scenes_g()
     load_filters_g()
     load_samplers_g()
+    load_metrics_g()
 
-    compare_exec = os.path.join(install_prefix_dir, 'bin/fbksd-compare')
     exr2png_exec = os.path.join(install_prefix_dir, 'bin/fbksd-exr2png')
 
     if args.all:
@@ -709,7 +744,7 @@ def cmd_results_compute(args):
         filters,
         scenes_dir,
         exr2png_exec,
-        compare_exec,
+        g_iqa_metrics,
         args.overwrite
     )
 
@@ -719,7 +754,7 @@ def cmd_results_compute(args):
         samplers,
         scenes_dir,
         exr2png_exec,
-        compare_exec,
+        g_iqa_metrics,
         args.overwrite
     )
 
@@ -738,21 +773,15 @@ def cmd_results_show(args):
 
     load_scenes_g()
     load_filters_g()
+    load_metrics_g()
     load_results_g()
     load_samplers_g()
     load_samplers_results_g()
 
-    metrics = []
-    if args.mse:
-        metrics.append('mse')
-    if args.psnr:
-        metrics.append('psnr')
-    if args.ssim:
-        metrics.append('ssim')
-    if args.rmse:
-        metrics.append('rmse')
-    if not metrics:
-        metrics = ['mse', 'psnr', 'ssim', 'rmse']
+    if args.metrics is None:
+        metrics = load_iqa_metrics(iqa_metrics_dir).keys()
+    else:
+        metrics = args.metrics
 
     if args.all:
         scenes = g_scenes.values()
@@ -787,24 +816,14 @@ def cmd_results_rank(args):
 
     load_scenes_g()
     load_filters_g()
+    load_metrics_g()
     load_results_g()
     load_samplers_g()
     load_samplers_results_g()
 
-    metrics = []
-    if args.mse:
-        metrics.append(ErrorMetric('mse'))
-    if args.psnr:
-        metrics.append(ErrorMetric('psnr', lower_is_better=False))
-    if args.ssim:
-        metrics.append(ErrorMetric('ssim', lower_is_better=False))
-    if args.rmse:
-        metrics.append(ErrorMetric('rmse'))
-    if not metrics:
-        metrics = [ErrorMetric('mse'),
-            ErrorMetric('psnr', lower_is_better=False),
-            ErrorMetric('ssim', lower_is_better=False),
-            ErrorMetric('rmse')]
+    metrics = load_iqa_metrics(iqa_metrics_dir).values()
+    if args.metrics is not None:
+        metrics = [m for m in metrics if m.acronym in args.metrics]
 
     if args.all:
         scenes = g_scenes.values()
@@ -836,6 +855,7 @@ def cmd_results_export_csv(args):
     load_scenes_g()
     load_filters_g()
     load_samplers_g()
+    load_metrics_g()
     load_results_g()
     load_samplers_results_g()
 
@@ -853,32 +873,26 @@ def cmd_results_export_csv(args):
         filters = config.filter_versions
         samplers = config.sampler_versions
 
-    metrics = []
-    if args.mse:
-        metrics.append('mse')
-    if args.psnr:
-        metrics.append('psnr')
-    if args.ssim:
-        metrics.append('ssim')
-    if args.rmse:
-        metrics.append('rmse')
-    if not metrics:
-        metrics = ['mse', 'psnr', 'ssim', 'rmse']
-
-    mse_scale = 1.0
-    if args.mse_scale:
-        mse_scale = args.mse_scale
-
-    rmse_scale = 1.0
-    if args.rmse_scale:
-        rmse_scale = args.rmse_scale
+    if args.metrics is None:
+        metrics = {k:1.0 for k in load_iqa_metrics(iqa_metrics_dir).keys()}
+    else:
+        metrics = {}
+        regex = r'^([a-zA-Z0-9_-]+)({(\d*\.?\d*)})?$'
+        for m in args.metrics:
+            match = re.match(regex, m)
+            metric = match.group(1)
+            scale = match.group(3)
+            if scale:
+                metrics[metric] = float(scale)
+            else:
+                metrics[metric] = 1.0
 
     if filters:
         print('Filters')
-        print_csv(scenes, filters, metrics, mse_scale, rmse_scale)
+        print_csv(scenes, filters, metrics)
     if samplers:
         print('Samplers')
-        print_csv(scenes, samplers, metrics, mse_scale, rmse_scale)
+        print_csv(scenes, samplers, metrics)
 
 
 def cmd_page_export(args):
@@ -900,6 +914,7 @@ def cmd_page_export(args):
     load_scenes_g()
     load_filters_g()
     load_samplers_g()
+    load_metrics_g()
     load_results_g()
     load_samplers_results_g()
 
@@ -932,12 +947,11 @@ def cmd_page_export(args):
                 dest_path = os.path.join(args.dest, 'data', path)
                 if not os.path.exists(dest_path):
                     os.makedirs(dest_path)
-                suffixes = [
-                    os.path.join(path, '{}_0.png'.format(result.spp)),
-                    os.path.join(path, '{}_0_mse_map.png'.format(result.spp)),
-                    os.path.join(path, '{}_0_ssim_map.png'.format(result.spp)),
-                    os.path.join(path, '{}_0_rmse_map.png'.format(result.spp)),
-                ]
+
+                suffixes = [ os.path.join(path, '{}_0.png'.format(result.spp)) ]
+                for metric in result.metrics:
+                    suffixes.append(os.path.join(path, '{}_0_{}_map.png'.format(result.spp, metric)))
+
                 for suffix in suffixes:
                     img = os.path.join(current_slot_dir, suffix)
                     if not os.path.isfile(img):
@@ -950,6 +964,7 @@ def cmd_page_export(args):
     copy_results(samplers, scene_config_spps, 'samplers')
     # copy data files
     data_dest = os.path.join(args.dest, 'data')
+    shutil.copyfile(os.path.join(current_slot_dir, 'iqa_metrics.json'), os.path.join(data_dest, 'iqa_metrics.json'))
     shutil.copyfile(os.path.join(current_slot_dir, 'scenes.json'), os.path.join(data_dest, 'scenes.json'))
     shutil.copyfile(os.path.join(current_slot_dir, 'filters.json'), os.path.join(data_dest, 'filters.json'))
     shutil.copyfile(os.path.join(current_slot_dir, 'results.json'), os.path.join(data_dest, 'results.json'))
@@ -1069,7 +1084,7 @@ def cmd_serve(args):
 #=============================================
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(prog='fbksd', description='fbksd system cli interface.')
-    parser.add_argument('--version', action='version', version='%(prog)s version 1.0.0')
+    parser.add_argument('--version', action='version', version='%(prog)s version 2.1.0')
     subparsers = parser.add_subparsers(title='subcommands')
 
     # init
@@ -1214,6 +1229,12 @@ if __name__ == "__main__":
     parserScenes.add_argument('--ready', action='store_true', help='List only scenes from ready renderers.')
     parserScenes.set_defaults(func=cmd_scenes)
 
+    # metrics
+    parserMetrics = subparsers.add_parser('metrics', formatter_class=RawTextHelpFormatter,
+        help='List available IQA (Image Quality Assessment) metrics.',
+        description='List available IQA (Image Quality Assessment) metrics.')
+    parserMetrics.set_defaults(func=cmd_metrics)
+
     # filter-info
     parserFilterInfo = subparsers.add_parser('filter-info', formatter_class=RawTextHelpFormatter,
         help='Show details about filters.', description='Show details about filters.')
@@ -1254,10 +1275,7 @@ if __name__ == "__main__":
             'By default, only errors metrics for the current config are shown. You can show all the results\n'
             'in the slot using the \'--all\' options, and also specify individual error metrics.')
     parserResultsShow.add_argument('--all', action='store_true', help='Show all results available in the slot.')
-    parserResultsShow.add_argument('--ssim', action='store_true', help='Show ssim error.')
-    parserResultsShow.add_argument('--mse', action='store_true', help='Shows mse error.')
-    parserResultsShow.add_argument('--psnr', action='store_true', help='Shows psnr error.')
-    parserResultsShow.add_argument('--rmse', action='store_true', help='Shows rmse error.')
+    parserResultsShow.add_argument('--metrics', metavar='IQA_METRIC', type=str, nargs='+', help='IQA metrics values to show.')
     parserResultsShow.set_defaults(func=cmd_results_show)
     ## results rank
     parserResultsRank = resultsSubparsers.add_parser('rank', formatter_class=RawTextHelpFormatter,
@@ -1267,10 +1285,7 @@ if __name__ == "__main__":
             'all ranks for each technique.\n\n'
             'Techniques with larger rank value are worst, while techniques with rank closer to 1.0 are better.')
     parserResultsRank.add_argument('--all', action='store_true', help='Rank all results available in the workspace.')
-    parserResultsRank.add_argument('--ssim', action='store_true', help='Shows ssim error.')
-    parserResultsRank.add_argument('--mse', action='store_true', help='Shows mse error.')
-    parserResultsRank.add_argument('--psnr', action='store_true', help='Shows psnr error.')
-    parserResultsRank.add_argument('--rmse', action='store_true', help='Shows rmse error.')
+    parserResultsRank.add_argument('--metrics', metavar='IQA_METRIC', type=str, nargs='+', help='IQA metrics.')
     parserResultsRank.set_defaults(func=cmd_results_rank)
     ## result print-csv
     parserResultsExportCSV = resultsSubparsers.add_parser('print-csv', formatter_class=RawTextHelpFormatter,
@@ -1285,14 +1300,13 @@ if __name__ == "__main__":
             '│ scene 2 │ spp 1 │    e9       │    e10   │    e11      │    e12   │\n'
             '│         │ spp 2 │    e13      │    e14   │    e15      │    e16   │\n\n'
             'By default, only results for the current config are included.\n'
-            'You can use the option \'--all\' to include all results available in the slot.')
+            'You can use the option \'--all\' to include all results available in the slot.\n\n'
+            'You cal also choose which IQA metrics are used (all by default) using the \'--metrics\' option,\n'
+            'passing the metrics acronyms. When passing the metrics, you can use the syntax \'<metric>{<scale>}\'\n'
+            'to specify a scale to be applied to all values of a specific metric: Ex: \'--metrics RMSE{10}\' will\n'
+            'apply a scale of 10 to all RMSE values.')
     parserResultsExportCSV.add_argument('--all', action='store_true', help='Include all available results.')
-    parserResultsExportCSV.add_argument('--ssim', action='store_true', help='Include ssim error.')
-    parserResultsExportCSV.add_argument('--mse', action='store_true', help='Includes mse error.')
-    parserResultsExportCSV.add_argument('--psnr', action='store_true', help='Includes psnr error.')
-    parserResultsExportCSV.add_argument('--rmse', action='store_true', help='Includes rmse error.')
-    parserResultsExportCSV.add_argument('--mse-scale', type=float, dest='mse_scale', help='Scale applied to the mse values.')
-    parserResultsExportCSV.add_argument('--rmse-scale', type=float, dest='rmse_scale', help='Scale applied to the rmse values.')
+    parserResultsExportCSV.add_argument('--metrics', metavar='IQA_METRIC', type=str, nargs='+', help='IQA metrics.')
     parserResultsExportCSV.set_defaults(func=cmd_results_export_csv)
 
     # slots

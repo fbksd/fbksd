@@ -212,6 +212,44 @@ def load_samplers(samplers_dir):
     return load_techniques(samplers_dir, sample_factory, sample_version_factory)
 
 
+def save_native_iqa(iqa_dir, command):
+    if not os.path.isdir(iqa_dir):
+        os.mkdir(iqa_dir)
+    p = Popen([command, '--info'], stdout=PIPE)
+    p.wait()
+    data = json.loads(p.stdout.read())
+    data['command'] = command
+    with open(os.path.join(iqa_dir, "info.json"), 'w') as info:
+        json.dump(data, info, indent=4)
+
+
+def load_iqa_metrics(iqa_dir):
+    metrics = {}
+    if os.path.isdir(iqa_dir):
+        names = [name for name in os.listdir(iqa_dir) if os.path.isdir(os.path.join(iqa_dir, name))]
+        for name in names:
+            info = None
+            info_filename = os.path.join(iqa_dir, name, 'info.json')
+            if not os.path.isfile(info_filename):
+                print('IQA technique {} missing info.json file.'.format(name))
+                continue
+            with open(os.path.join(iqa_dir, name, 'info.json')) as info_file:
+                info = json.load(info_file)
+            acronym = info['acronym']
+            name = info['name']
+            reference = info['reference']
+            lower_is_better = info['lower_is_better']
+            has_error_map = info['has_error_map']
+            if 'command' in info:
+                command = info['command']
+            else:
+                command = os.path.join(iqa_dir, acronym, info['executable'])
+            metrics[acronym] = IQAMetric(acronym=acronym,
+                name=name, reference=reference, lower_is_better=lower_is_better,
+                has_error_map=has_error_map, command=command)
+    return metrics
+
+
 def save_techniques_file(scenes, versions_ids, techniques, filepath):
     data = []
     for key, f in techniques.items():
@@ -253,7 +291,7 @@ def save_techniques_file(scenes, versions_ids, techniques, filepath):
         json.dump(data, ofile, indent=4)
 
 
-def load_techniques_results(techniques, g_scenes, techniques_dir, result_factory):
+def load_techniques_results(techniques, g_scenes, metrics, techniques_dir, result_factory):
     for tech in list(techniques.values()):
         filter_dir = os.path.join(techniques_dir, tech.name)
         if not os.path.isdir(filter_dir):
@@ -267,60 +305,67 @@ def load_techniques_results(techniques, g_scenes, techniques_dir, result_factory
                 if not os.path.isdir(version_results_dir):
                     continue
 
-                spps = []
+                spps = set()
                 errors_logs_by_spps = {}
-                errors_logs = glob.glob(os.path.join(version_results_dir, '*_0_errors.json'))
+                errors_logs = glob.glob(os.path.join(version_results_dir, '*_0_*_value.json'))
                 for errors_log_filename in errors_logs:
                     name = os.path.basename(errors_log_filename)
-                    m = re.match(r'(\d+)_.*errors\.json', name)
+                    m = re.match(r'(\d+)_.*_([^/]+)_value\.json$', name)
                     if not m:
                         continue
                     spp = int(m.group(1))
-                    spps.append(spp)
-                    errors_logs_by_spps[spp] = errors_log_filename
+                    spps.add(spp)
+                    metric = m.group(2)
+                    if metric not in metrics:
+                        continue
+                    if spp in errors_logs_by_spps:
+                        errors_logs_by_spps[spp][metric] = errors_log_filename
+                    else:
+                        errors_logs_by_spps[spp] = {metric: errors_log_filename}
+                spps = list(spps)
                 spps.sort()
 
                 for spp in spps:
-                    errors_log_filename = errors_logs_by_spps[spp]
                     result_img_filename = os.path.join(version_results_dir, '{}_0.exr'.format(spp))
                     if not os.path.isfile(result_img_filename):
                         continue
-                    # skip old results
-                    if os.path.getctime(result_img_filename) > os.path.getctime(errors_log_filename):
-                        continue
 
-                    result = result_factory()
-                    result.filter_version = version
-                    result.scene = scene
-                    result.spp = int(spp)
                     main_log_filename = os.path.join(version_results_dir, '{}_0_log.json'.format(spp))
                     with open(main_log_filename) as log_file:
                         log_data = json.load(log_file)
+                        if log_data['aborted']:
+                            continue
+                        result = result_factory()
+                        result.filter_version = version
+                        result.scene = scene
+                        result.spp = int(spp)
                         result.aborted = log_data['aborted']
                         result.exec_time = log_data['exec_time']['time_ms']
-                    with open(errors_log_filename) as log_file:
-                        log_data = json.load(log_file)
-                        result.mse = log_data['mse']
-                        result.psnr = log_data['psnr']
-                        result.ssim = log_data['ssim']
-                        if 'rmse' in log_data:
-                            result.rmse = log_data['rmse']
-                    if result.aborted:
-                        continue
-                    # TODO: regions errors
+
+                    exr_ctime = os.path.getctime(result_img_filename)
+                    value_files = errors_logs_by_spps[spp]
+                    for metric in value_files:
+                        value_log_filename = value_files[metric]
+                        # skip value logs that are older than the corresponding exr image
+                        if exr_ctime > os.path.getctime(value_log_filename):
+                            continue
+                        with open(value_log_filename) as log_file:
+                            log_data = json.load(log_file)
+                            result.metrics[metric] = log_data[metric]
+                        # TODO: regions errors
                     version.results.append(result)
 
 
-def load_filters_results(filters, scenes, current_slot_dir):
+def load_filters_results(filters, scenes, metrics, current_slot_dir):
     def result_factory():
         return Result()
-    load_techniques_results(filters, scenes, os.path.join(current_slot_dir, 'denoisers'), result_factory)
+    load_techniques_results(filters, scenes, metrics, os.path.join(current_slot_dir, 'denoisers'), result_factory)
 
 
-def load_samplers_results(samplers, scenes, current_slot_dir):
+def load_samplers_results(samplers, scenes, metrics, current_slot_dir):
     def result_factory():
         return SamplerResult()
-    load_techniques_results(samplers, scenes, os.path.join(current_slot_dir, 'samplers'), result_factory)
+    load_techniques_results(samplers, scenes, metrics, os.path.join(current_slot_dir, 'samplers'), result_factory)
 
 
 def save_techniques_result_file(filepath, scenes_by_id, g_filters, versions_ids):
@@ -339,18 +384,19 @@ def save_techniques_result_file(filepath, scenes_by_id, g_filters, versions_ids)
                     if result.spp not in scene.spps:
                         continue
 
-                data[result.id] = {
+                item = {
                     'scene_id': result.scene.id,
                     'spp': result.spp,
                     'filter_version_id': result.filter_version.id,
                     'exec_time': result.exec_time,
-                    'mse': result.mse,
-                    'psnr': result.psnr,
-                    'ssim': result.ssim,
-                    'rmse': result.rmse,
                     'aborted': result.aborted
                     #TODO: regions
                 }
+                metrics = {}
+                for metric, value in result.metrics.items():
+                    metrics[metric] = value
+                item['metrics'] = metrics
+                data[result.id] = item
     with open(filepath, 'w') as ofile:
         json.dump(data, ofile, indent=4)
 
@@ -361,6 +407,16 @@ def save_filters_result_file(current_slot_dir, scenes_by_id, filters, versions_i
 
 def save_samplers_result_file(current_slot_dir, scenes_by_id, samplers, versions_ids):
     save_techniques_result_file(os.path.join(current_slot_dir, 'samplers_results.json'), scenes_by_id, samplers, versions_ids)
+
+
+def save_iqa_metrics(metrics, current_slot_dir):
+    data = {}
+    for metric in metrics.values():
+        item = metric.__dict__
+        del item['command']
+        data[metric.acronym] = item
+    with open(os.path.join(current_slot_dir, 'iqa_metrics.json'), 'w') as ofile:
+        json.dump(data, ofile, indent=4)
 
 
 # get a list of ids and load the corresponding scenes
@@ -528,56 +584,14 @@ def run_techniques(benchmark_exec, techniques_prefix, techiques, g_techiques_nam
             print(p.stdout.read())
 
 
-def make_error_logs_dict():
-    errors_dict = {}
-    errors = glob.glob('*/*/*/*_errors.json')
-    for error in errors:
-        m = re.match(r'([a-zA-Z0-9_ ]+)/([a-zA-Z0-9_ ]+)/([a-zA-Z0-9_ ]+)/(\d+)_.*errors\.json', error)
-        if m:
-            technique_name = m.group(1)
-            version_name = m.group(2)
-            scene_name = m.group(3)
-            spp = int(m.group(4))
-
-            if technique_name in errors_dict:
-                s1 = errors_dict[technique_name]
-                if version_name in s1:
-                    s2 = s1[version_name]
-                    if scene_name in s2:
-                        s3 = s2[scene_name]
-                        s3[spp] = error
-                    else:
-                        s2[scene_name] = {spp: error}
-                else:
-                    s1[version_name] = {scene_name: {spp: error}}
-            else:
-                errors_dict[technique_name] = {version_name: {scene_name: {spp: error}}}
-    return errors_dict
-
-
-def get_error_log(errors_dict, technique_name, version_name, scene_name, spp):
-    log = None
-    if technique_name in errors_dict:
-        d1 = errors_dict[technique_name]
-        if version_name in d1:
-            d2 = d1[version_name]
-            if scene_name in d2:
-                d3 = d2[scene_name]
-                if spp in d3:
-                    log = d3[spp]
-    return log
-
-
-def compare_techniques_results(results_prefix, scenes_names, versions, scenes_dir, exr2png_exec, compare_exec, overwrite = False):
+def compare_techniques_results(results_prefix, scenes_names, versions, scenes_dir, exr2png_exec, g_iqa_metrics, overwrite = False):
     if not os.path.exists(results_prefix):
         return
 
     with cd(results_prefix):
         results = glob.glob('*/*/*/*.exr')
-        errors_dict = make_error_logs_dict()
-
         for r in results:
-            m = re.match(r'([a-zA-Z0-9_ ]+)/([a-zA-Z0-9_ ]+)/([a-zA-Z0-9_ ]+)/(\d+)_.*\.exr', r)
+            m = re.match(r'([^/]+)/([^/]+)/([^/]+)/(\d+)_.*\.exr$', r)
             if not m:
                 continue
             technique_name = m.group(1)
@@ -603,26 +617,37 @@ def compare_techniques_results(results_prefix, scenes_names, versions, scenes_di
             if not os.path.isfile(img2):
                 continue
 
-            # skip results already computed
+            print('Technique: \"{}\", Scene: \"{}\", SPP: {}'.format(technique_name, scene_name, spp), flush=True)
+            # skip generating png image again if it already exists and is newer than the test image
             if not overwrite:
-                log = get_error_log(errors_dict, technique_name, version_name, scene_name, spp)
-                if log:
-                    log_ctime = os.path.getctime(log)
-                    if log_ctime > os.path.getctime(img2) and log_ctime > os.path.getctime(img1):
-                        continue
+                png = os.path.join(technique_name, version_name, scene_name, f'{spp}_0.png')
+                if not os.path.exists(png) or os.path.getctime(png) < os.path.getctime(img2):
+                    call([exr2png_exec, img2], stdout=PIPE)
 
-            call([exr2png_exec, img2])
+            # compute values and maps for all IQA metrics
+            for metric in g_iqa_metrics.values():
+                command = metric.command
+                dest_prefix = os.path.join(results_prefix, technique_name, version_name, scene_name)
+                value_file = os.path.join(dest_prefix, '{}_0_{}_value.json'.format(spp, metric.acronym))
+                map_file = os.path.join(dest_prefix, '{}_0_{}_map.png'.format(spp, metric.acronym))
+                print(' - {}... '.format(metric.acronym), end='', flush=True)
 
-            # compare the full result with the ground truth end parse errors
-            p = Popen([compare_exec, '--save-maps', '--save-errors', img1, img2], stdout=PIPE, stdin=PIPE, stderr=PIPE)
-            p.wait()
-            # copy maps and errors log to results folder
-            dest_prefix = os.path.join(results_prefix, technique_name, version_name, scene_name)
-            shutil.move('errors.json', os.path.join(dest_prefix, '{}_0_errors.json'.format(spp)))
-            shutil.move('mse_map.png', os.path.join(dest_prefix, '{}_0_mse_map.png'.format(spp)))
-            shutil.move('rmse_map.png', os.path.join(dest_prefix, '{}_0_rmse_map.png'.format(spp)))
-            shutil.move('ssim_map.png', os.path.join(dest_prefix, '{}_0_ssim_map.png'.format(spp)))
-            print('{}, {}, {} spp'.format(technique_name, scene_name, spp))
+                # skip computing IQA if the file already exists and is newer than the reference and test images.
+                if not overwrite:
+                    if os.path.exists(value_file):
+                        log_ctime = os.path.getctime(value_file)
+                        if log_ctime > os.path.getctime(img2) and log_ctime > os.path.getctime(img1):
+                            print('skiped')
+                            continue
+
+                p = Popen([command, '--value-file', value_file, '--map-file', map_file, img1, img2], stdout=PIPE, stdin=PIPE, stderr=PIPE)
+                if p.wait() == 0:
+                    print('done')
+                else:
+                    error_log_file = os.path.join(dest_prefix, '{}_0_{}_error.log'.format(spp, metric.acronym))
+                    print('failed (see log file \"{}\")'.format(error_log_file))
+                    with open(error_log_file, 'w') as f:
+                        f.write(p.stderr.read().decode(sys.stderr.encoding))
 
 
 def print_table_simple(table_title, cols_labels, data):
@@ -699,7 +724,7 @@ def print_results(versions, scenes, metrics):
                 for col_i, spp in enumerate(spps):
                     result = v.get_result(scene, spp)
                     if result:
-                        data[row_i][col_i] = getattr(result, metric)
+                        data[row_i][col_i] = result.metrics[metric]
                         table_has_results = True
             if table_has_results:
                 print_table(scene.get_name(), ' ', metric, names, spps_names, data)
@@ -709,7 +734,7 @@ def print_results(versions, scenes, metrics):
         print('No results.')
 
 
-def print_csv(scenes, versions, metrics, mse_scale, rmse_scale):
+def print_csv(scenes, versions, metrics):
     def print_table_csv(data):
         for row in data:
             for value in row:
@@ -751,13 +776,7 @@ def print_csv(scenes, versions, metrics, mse_scale, rmse_scale):
                     result = f.get_result(scene, spp)
                     for metric in metrics:
                         if result:
-                            value = 0.0
-                            if metric == 'mse':
-                                value = getattr(result, metric) * mse_scale
-                            elif metric == 'rmse':
-                                value = getattr(result, metric) * rmse_scale
-                            else:
-                                value = getattr(result, metric)
+                            value = result.metrics[metric] * metrics[metric]
                             data[row_i + 2][col_i + 2] = '{:.4f}'.format(value)
                         col_i += 1
                 row_i += 1
@@ -831,95 +850,6 @@ def scan_scenes(scenes_dir):
         json.dump(data, ofile, indent=4)
 
 
-def load_saved_results(results_dir):
-    with open(os.path.join(results_dir, 'scenes.json')) as f:
-        scenes_dic = json.load(f)
-    with open(os.path.join(results_dir, 'filters.json')) as f:
-        filters_dic = json.load(f)
-    with open(os.path.join(results_dir, 'samplers.json')) as f:
-        samplers_dic = json.load(f)
-    with open(os.path.join(results_dir, 'results.json')) as f:
-        filters_results_dic = json.load(f)
-    with open(os.path.join(results_dir, 'samplers_results.json')) as f:
-        samplers_results_dic = json.load(f)
-
-    renderers = {}
-    scenes = {}
-    for s in scenes_dic.values():
-        scene = Scene()
-        scene.id = s['id']
-        scene.name = s['name']
-        if s['renderer'] in renderers:
-            scene.renderer = renderers[s['renderer']]
-        else:
-            r = Renderer()
-            r.name = s['renderer']
-            renderers[s['renderer']] = r
-            scene.renderer = r
-        scenes[scene.id] = scene
-
-    filters = []
-    for f in filters_dic:
-        filt = Filter()
-        filt.id = f['id']
-        filt.name = f['name']
-        for v in f['versions']:
-            version = FilterVersion()
-            version.technique = filt
-            version.id = v['id']
-            version.tag = v['tag']
-            for rid in v['results_ids']:
-                r = filters_results_dic[str(rid)]
-                result = Result()
-                result.scene = scenes[r['scene_id']]
-                result.filter_version = version
-                result.spp = r['spp']
-                if result.spp not in result.scene.spps:
-                    result.scene.spps.append(result.spp)
-                result.exec_time = r['exec_time']
-                result.mse = r['mse']
-                result.psnr = r['psnr']
-                result.ssim = r['ssim']
-                result.rmse = r['rmse']
-                result.aborte = r['aborted']
-                version.results.append(result)
-            filt.versions.append(version)
-            filters.append(version)
-
-    samplers = []
-    for f in samplers_dic:
-        filt = Sampler()
-        filt.id = f['id']
-        filt.name = f['name']
-        for v in f['versions']:
-            version = SamplerVersion()
-            version.technique = filt
-            version.id = v['id']
-            version.tag = v['tag']
-            for rid in v['results_ids']:
-                r = samplers_results_dic[rid]
-                result = SamplerResult()
-                result.sampler_version = version
-                result.scene = scenes[r['scene_id']]
-                result.spp = r['spp']
-                if result.spp not in result.scene.spps:
-                    result.scene.spps.append(result.spp)
-                result.exec_time = r['exec_time']
-                result.mse = r['mse']
-                result.psnr = r['psnr']
-                result.ssim = r['ssim']
-                result.rmse = r['rmse']
-                result.aborte = r['aborted']
-                version.results.append(result)
-            filt.versions.append(version)
-            samplers.append(filt)
-
-    for s in scenes.values():
-        s.spps.sort()
-
-    return scenes, filters, samplers
-
-
 def query_yes_no(question, default="yes"):
     """Ask a yes/no question via input() and return their answer.
 
@@ -975,7 +905,7 @@ def rank_techniques(title, scenes, versions, metrics):
                     r = f.get_result(scene, spp)
                     if not r:
                         continue
-                    v = getattr(r, metric.name)
+                    v = r.metrics[metric.acronym]
                     errors.append((f, v))
                 errors = sorted(errors, key=lambda p: p[1], reverse=not metric.lower_is_better)
                 for i, p in enumerate(errors):

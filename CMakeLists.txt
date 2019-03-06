@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.5.1 FATAL_ERROR)
-project(fbksd-core VERSION 2.0.0)
+project(fbksd-core VERSION 2.1.0)
 
 option(FBKSD_TESTS "Compile tests." OFF)
 
@@ -21,8 +21,9 @@ add_subdirectory(src/libcore)
 add_subdirectory(src/libbenchmark)
 add_subdirectory(src/libclient)
 add_subdirectory(src/librenderer)
+add_subdirectory(src/libiqa)
 add_subdirectory(src/benchmark)
-add_subdirectory(src/compare)
+add_subdirectory(src/iqa)
 add_subdirectory(src/exr2png)
 
 # install data folder

@@ -160,10 +160,14 @@ class ImageRegion(BaseModel):
         self.gi_w = 0.0 # global illumination
 
 
-class ErrorMetric():
-    def __init__(self, name, *, lower_is_better=True):
+class IQAMetric():
+    def __init__(self, acronym, name, reference, lower_is_better, has_error_map, command):
+        self.acronym = acronym
         self.name = name
+        self.reference = reference
         self.lower_is_better = lower_is_better
+        self.has_error_map = has_error_map
+        self.command = command # command is the executable path for non-built-in methods
 
 
 class RegionError(BaseModel):
@@ -172,11 +176,7 @@ class RegionError(BaseModel):
     def __init__(self):
         super().__init__(RegionError.__nextId)
         RegionError.__nextId += 1
-
-        self.mse = 0.0
-        self.psnr = 0.0
-        self.ssim = 0.0
-        self.rmse = 0.0
+        self.metrics = {}
         self.region = None # ImageRegion
         self.result = None # Result
 
@@ -188,10 +188,7 @@ class TechniqueResult(BaseModel):
         self.scene = None
         self.spp = 0
         self.exec_time = 0
-        self.mse = 0.0
-        self.psnr = 0.0
-        self.ssim = 0.0
-        self.rmse = 0.0
+        self.metrics = {}
         self.aborted = False
         self.region_errors = [] # RegionError[]
 

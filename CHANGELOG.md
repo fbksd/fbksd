@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.1.0
+- Add an API for Image quality assessment (IQA) techniques. The API allows easily adding new IQA techniques to be used by the fbksd;
+- Fix a bug in the 'config new' command with '*-all' options;
+- Fix a bug that prevented the user of scenes with parenthesis in the name;
+- Improved documentation.
+
 ## 2.0.0
 - Tile-based approach for sample data transfer.
 

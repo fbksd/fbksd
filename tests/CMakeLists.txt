@@ -33,3 +33,6 @@ target_compile_definitions(TestBenchmarkManager
         -DCLIENT_FILE="$<TARGET_FILE:mockclient>"
 )
 add_dependencies(TestBenchmarkClient mockrenderer mockrenderer)
+
+add_exec_test(TestIqa libiqa/TestIqa.cpp fbksd::iqa)
+add_exec_test(TestImg libiqa/TestImg.cpp fbksd::iqa)
