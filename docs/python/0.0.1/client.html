@@ -1,0 +1,322 @@
+
+
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>fbksd.client &mdash; FBKSD Python 0.0.1 documentation</title>
+  
+
+  
+  
+    <link rel="shortcut icon" href="_static/favicon.png"/>
+  
+  
+  
+
+  
+  <script type="text/javascript" src="_static/js/modernizr.min.js"></script>
+  
+    
+      <script type="text/javascript" id="documentation_options" data-url_root="./" src="_static/documentation_options.js"></script>
+        <script type="text/javascript" src="_static/jquery.js"></script>
+        <script type="text/javascript" src="_static/underscore.js"></script>
+        <script type="text/javascript" src="_static/doctools.js"></script>
+        <script type="text/javascript" src="_static/language_data.js"></script>
+        <script async="async" type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.5/latest.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    
+    <script type="text/javascript" src="_static/js/theme.js"></script>
+
+    
+
+  
+  <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="prev" title="FBKSD Python" href="index.html" />
+    <link href="_static/style.css" rel="stylesheet" type="text/css">
+
+</head>
+
+<body class="wy-body-for-nav">
+
+   
+  <div class="wy-grid-for-nav">
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+          
+
+          
+            <a href="index.html" class="icon icon-home"> FBKSD Python
+          
+
+          
+            
+            <img src="_static/logo.png" class="logo" alt="Logo"/>
+          
+          </a>
+
+          
+            
+            
+              <div class="version">
+                0.0.1
+              </div>
+            
+          
+
+          
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          
+        </div>
+
+        <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          
+            
+            
+              
+            
+            
+              <p class="caption"><span class="caption-text">Modules</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="current reference internal" href="#"><code class="xref py py-mod docutils literal notranslate"><span class="pre">fbksd.client</span></code></a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#classes">Classes</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#benchmarkclient">BenchmarkClient</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#sceneinfo">SceneInfo</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+            
+          
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" aria-label="top navigation">
+        
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">FBKSD Python</a>
+        
+      </nav>
+
+
+      <div class="wy-nav-content">
+        
+        <div class="rst-content">
+        
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="wy-breadcrumbs">
+    
+      <li><a href="index.html">Docs</a> &raquo;</li>
+        
+      <li><code class="xref py py-mod docutils literal notranslate"><span class="pre">fbksd.client</span></code></li>
+    
+    
+      <li class="wy-breadcrumbs-aside">
+        
+            
+        
+      </li>
+    
+  </ul>
+
+  
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+            
+  <div class="section" id="module-fbksd.client">
+<span id="fbksd-client"></span><h1><a class="reference internal" href="#module-fbksd.client" title="fbksd.client"><code class="xref py py-mod docutils literal notranslate"><span class="pre">fbksd.client</span></code></a><a class="headerlink" href="#module-fbksd.client" title="Permalink to this headline">¶</a></h1>
+<div class="section" id="classes">
+<h2>Classes<a class="headerlink" href="#classes" title="Permalink to this headline">¶</a></h2>
+<div class="section" id="benchmarkclient">
+<h3>BenchmarkClient<a class="headerlink" href="#benchmarkclient" title="Permalink to this headline">¶</a></h3>
+<dl class="class">
+<dt id="fbksd.client.BenchmarkClient">
+<em class="property">class </em><code class="descclassname">fbksd.client.</code><code class="descname">BenchmarkClient</code><a class="headerlink" href="#fbksd.client.BenchmarkClient" title="Permalink to this definition">¶</a></dt>
+<dd><p>The BenchmarkClient class is used to communicate with the benchmark server</p>
+<dl class="method">
+<dt id="fbksd.client.BenchmarkClient.evaluate_samples">
+<code class="descname">evaluate_samples</code><span class="sig-paren">(</span><em>(BenchmarkClient)self</em>, <em>(object)spp</em>, <em>(object)consumer</em><span class="sig-paren">)</span> &#x2192; None :<a class="headerlink" href="#fbksd.client.BenchmarkClient.evaluate_samples" title="Permalink to this definition">¶</a></dt>
+<dd><p>Request samples.</p>
+<p>The samples are computed by the renderer and sent in tiles. For each tile, the consumer callback
+function is called so you can consume the samples.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>spp</strong> – number of samples per pixel to evaluate.</p></li>
+<li><p><strong>consumer</strong> – <p>Consumer callback function.
+The callback should accept two parameters: <code class="docutils literal notranslate"><span class="pre">tile</span></code> and <code class="docutils literal notranslate"><span class="pre">offset</span></code>.</p>
+<p>The <code class="docutils literal notranslate"><span class="pre">tile</span></code> is a <a class="reference external" href="https://docs.scipy.org/doc/numpy/reference/generated/numpy.ndarray.html#numpy.ndarray">numpy.ndarray</a> containing the tile data. It has 4 dimensions, in this order:
+<code class="docutils literal notranslate"><span class="pre">height</span></code>, <code class="docutils literal notranslate"><span class="pre">width</span></code>, <code class="docutils literal notranslate"><span class="pre">spp</span></code>, and <code class="docutils literal notranslate"><span class="pre">sample_size</span></code>, where <code class="docutils literal notranslate"><span class="pre">sample_size</span></code> is the number of components
+of the sample specified in the <a class="reference internal" href="#fbksd.client.BenchmarkClient.set_sample_layout" title="fbksd.client.BenchmarkClient.set_sample_layout"><code class="xref py py-func docutils literal notranslate"><span class="pre">set_sample_layout()</span></code></a> method.</p>
+<p>The <code class="docutils literal notranslate"><span class="pre">offset</span></code> is a tuple containing the <span class="math notranslate nohighlight">\((x, y)\)</span> pixel coordinates of the result image, corresponding to the    upper-left corner of the tile.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Your callback function should return as fast as possible.       So, try to avoid raw loops when consuming the samples whenever possible.</p>
+</div>
+</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="fbksd.client.BenchmarkClient.get_result_buffer">
+<code class="descname">get_result_buffer</code><span class="sig-paren">(</span><em>(BenchmarkClient)self</em><span class="sig-paren">)</span> &#x2192; numpy.ndarray :<a class="headerlink" href="#fbksd.client.BenchmarkClient.get_result_buffer" title="Permalink to this definition">¶</a></dt>
+<dd><p>Returns a pointer to the buffer where the result image is stored.</p>
+<p>The user should write the final reconstructed image to this buffer before calling <a class="reference internal" href="#fbksd.client.BenchmarkClient.send_result" title="fbksd.client.BenchmarkClient.send_result"><code class="xref py py-func docutils literal notranslate"><span class="pre">send_result()</span></code></a>.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p>A RGB image as a <a class="reference external" href="https://docs.scipy.org/doc/numpy/reference/generated/numpy.ndarray.html#numpy.ndarray">numpy.ndarray</a> with shape <code class="docutils literal notranslate"><span class="pre">(height,</span> <span class="pre">width,</span> <span class="pre">3)</span></code> .</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="fbksd.client.BenchmarkClient.get_scene_info">
+<code class="descname">get_scene_info</code><span class="sig-paren">(</span><em>(BenchmarkClient)</em><span class="sig-paren">)</span> &#x2192; SceneInfo :<a class="headerlink" href="#fbksd.client.BenchmarkClient.get_scene_info" title="Permalink to this definition">¶</a></dt>
+<dd><dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p>Returns information about the scene being rendered.</p>
+</dd>
+<dt class="field-even">Return type</dt>
+<dd class="field-even"><p><a class="reference internal" href="#fbksd.client.SceneInfo" title="fbksd.client.SceneInfo"><code class="xref py py-class docutils literal notranslate"><span class="pre">SceneInfo</span></code></a>.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="fbksd.client.BenchmarkClient.send_result">
+<code class="descname">send_result</code><span class="sig-paren">(</span><em>(BenchmarkClient)self</em><span class="sig-paren">)</span> &#x2192; None :<a class="headerlink" href="#fbksd.client.BenchmarkClient.send_result" title="Permalink to this definition">¶</a></dt>
+<dd><p>Sends the final result.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="fbksd.client.BenchmarkClient.set_sample_layout">
+<code class="descname">set_sample_layout</code><span class="sig-paren">(</span><em>(BenchmarkClient)self</em>, <em>(list)layout</em><span class="sig-paren">)</span> &#x2192; None :<a class="headerlink" href="#fbksd.client.BenchmarkClient.set_sample_layout" title="Permalink to this definition">¶</a></dt>
+<dd><p>Sets the sample layout.</p>
+<p>The layout is the way to inform the FBKSD server what data your technique requires for each sample, and how the data should be laid out in memory. Common data includes, for example, color RGB and (x,y) image plane position.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>layout</strong> (<em>list</em>) – List of sample components.
+A component can be a string (Ex: <code class="docutils literal notranslate"><span class="pre">'COLOR_R'</span></code>), or a pair with a string and a number indicating    the enumeration value (Ex: <code class="docutils literal notranslate"><span class="pre">('NORMAL_X',</span> <span class="pre">1)</span></code>, indication the x normal value for the second intersection point).
+The list of available components can be found in the <a class="reference external" href="https://fbksd.github.io/fbksd/docs/latest/classfbksd_1_1SampleLayout.html#details">C++ API reference</a>.</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+</div>
+<div class="section" id="sceneinfo">
+<h3>SceneInfo<a class="headerlink" href="#sceneinfo" title="Permalink to this headline">¶</a></h3>
+<dl class="class">
+<dt id="fbksd.client.SceneInfo">
+<em class="property">class </em><code class="descclassname">fbksd.client.</code><code class="descname">SceneInfo</code><a class="headerlink" href="#fbksd.client.SceneInfo" title="Permalink to this definition">¶</a></dt>
+<dd><p>Contains information about the scene being rendered.</p>
+<p>The list of available information can be found in the <a class="reference external" href="https://fbksd.github.io/fbksd/docs/latest/classfbksd_1_1SceneInfo.html#details">C++ API reference</a>.</p>
+<dl class="method">
+<dt id="fbksd.client.SceneInfo.get">
+<code class="descname">get</code><span class="sig-paren">(</span><em>(SceneInfo)arg1</em>, <em>(str)key</em><span class="sig-paren">)</span> &#x2192; object :<a class="headerlink" href="#fbksd.client.SceneInfo.get" title="Permalink to this definition">¶</a></dt>
+<dd><p>Returns the value for a given key. Throws an error if the key does not exists.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="fbksd.client.SceneInfo.has">
+<code class="descname">has</code><span class="sig-paren">(</span><em>(SceneInfo)arg1</em>, <em>(str)key</em><span class="sig-paren">)</span> &#x2192; bool :<a class="headerlink" href="#fbksd.client.SceneInfo.has" title="Permalink to this definition">¶</a></dt>
+<dd><p>Returns <cite>True</cite> if the given key exists.</p>
+</dd></dl>
+
+</dd></dl>
+
+</div>
+</div>
+</div>
+
+
+           </div>
+           
+          </div>
+          <footer>
+  
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+      
+      
+        <a href="index.html" class="btn btn-neutral float-left" title="FBKSD Python" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left"></span> Previous</a>
+      
+    </div>
+  
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        &copy; Copyright 2019, Jonas Deyson
+
+    </p>
+  </div>
+  Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+
+</footer>
+
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+  
+
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+
+  
+  
+    
+   
+
+</body>
+</html>

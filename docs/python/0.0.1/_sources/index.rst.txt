@@ -1,0 +1,75 @@
+
+************
+FBKSD Python 
+************
+
+FBKSD v2.2.0 introduces python binds for the ``fbksd-client`` library.
+This allows users to develop techniques (only non-adaptive denoisers, at this moment) in python,
+and leverage the increasingly popular machine learning frameworks.
+
+Installation
+============
+
+To install the FBKSD Python package, you just have to enable it in the `main FBKSD library <https://github.com/fbksd/fbksd>`_.
+Follow the FBKSD main library build/install `instructions <https://github.com/fbksd/fbksd#build-and-install>`_ and add the ``FBKSD_PYTHON`` variable when running cmake. Ex::
+
+    $ cmake -DCMAKE_BUILD_TYPE=Release -DFBKSD_PYTHON=ON ../
+
+By default, the package in installed under ``CMAKE_INSTALL_PREFIX/lib/python3/dist-packages``.
+You can change this path using the ``FBKSD_PYTHON_PATH`` variable. Ex::
+
+    $ cmake -DCMAKE_BUILD_TYPE=Release -DFBKSD_PYTHON=ON -DFBKSD_PYTHON_PATH=/usr/lib/python3.6../
+
+The path passed to ``FBKSD_PYTHON_PATH`` is appended to the ``CMAKE_INSTALL_PREFIX`` value to form the final location.
+
+.. Attention:: If the path passed to ``FBKSD_PYTHON_PATH`` doesn't start with a ``/``, cmake automatically prepends the current directory path to it.
+
+Implementing a Denoising Technique
+==================================
+
+The :mod:`fbksd.client` module allows to create a non-adaptive denoising technique.
+
+The workflow for is basically the same as in the C++ API.
+You create a ``BenchmarkClient`` object, request information about the scene, setup the sample layout, request the samples, and send result.
+
+The example below shows a simple box filter.
+Note we included the shebang ``#!/usr/bin/env python3`` to allow the file to be executed directly.
+FBKSD doesn't know this is a python script, and will try to execute it like any other technique.
+
+.. code-block:: python
+    :caption: Ex: pybox.py
+
+    #!/usr/bin/env python3
+
+    import fbksd.client as fc
+    import numpy as np
+
+    result = None
+
+    def process_samples(tile, offset):
+        (ny, nx, ns, ss) = tile.shape
+        (bx, by) = offset
+        res_window = result[by:by+ny, bx:bx+nx]
+        np.mean(tile, out=res_window, axis=2)
+
+    client = fc.BenchmarkClient()
+    info = client.get_scene_info()
+    spp = info.get('max_spp')
+    client.set_sample_layout(['COLOR_R', 'COLOR_G', 'COLOR_B'])
+    result = client.get_result_buffer()
+    client.evaluate_samples(spp, process_samples)
+    client.send_result()
+
+
+.. toctree::
+    :hidden:
+    :maxdepth: 2
+    :caption: Modules
+
+    client
+
+
+Indices and Tables
+==================
+* :ref:`genindex`
+* :ref:`modindex`
