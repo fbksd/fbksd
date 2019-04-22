@@ -40,19 +40,30 @@ namespace fbksd
     | LIGHT_X           |
     | LIGHT_Y           |
 
-    | Features          | Enumerable |
-    | ------------------|------------|
-    | COLOR_R           | no         |
-    | COLOR_G           | no         |
-    | COLOR_B           | no         |
-    | DEPTH             | no         |
-    | NORMAL_X          | yes        |
-    | NORMAL_Y          | yes        |
-    | NORMAL_Z          | yes        |
-    | TEXTURE_COLOR_R   | yes        |
-    | TEXTURE_COLOR_G   | yes        |
-    | TEXTURE_COLOR_B   | yes        |
-    | OBJECT_ID         | yes        |
+    | Features            | Enumerable |
+    | --------------------|------------|
+    | COLOR_R             | no         |
+    | COLOR_G             | no         |
+    | COLOR_B             | no         |
+    | DIRECT_LIGHT_R      | no         |
+    | DIRECT_LIGHT_G      | no         |
+    | DIRECT_LIGHT_B      | no         |
+    | DEPTH               | no         |
+    | NORMAL_X            | yes (0, 1) |
+    | NORMAL_Y            | yes (0, 1) |
+    | NORMAL_Z            | yes (0, 1) |
+    | TEXTURE_COLOR_R     | yes (0, 1) |
+    | TEXTURE_COLOR_G     | yes (0, 1) |
+    | TEXTURE_COLOR_B     | yes (0, 1) |
+    | WORLD_X_NS          | no         |
+    | WORLD_Y_NS          | no         |
+    | WORLD_Z_NS          | no         |
+    | NORMAL_X_NS         | no         |
+    | NORMAL_Y_NS         | no         |
+    | NORMAL_Z_NS         | no         |
+    | TEXTURE_COLOR_R_NS  | no         |
+    | TEXTURE_COLOR_G_NS  | no         |
+    | TEXTURE_COLOR_B_NS  | no         |
 
     When implementing adaptive techniques, you may want to generate your own random parameters. In this case,
     random parameters can be given an optional SampleLayout::ElementIO flag, specifying the element as input

@@ -20,6 +20,7 @@ FBKSD is a framework for developing and benchmarking sampling and denoising algo
 This repository contains the core of the FBKSD system. It consists of:
 
 - C++ libraries that support adding new techniques and renderers;
+- Python bindings;
 - the main command line interface (`fbksd`) used to manage and run benchmarks;
 - other miscellaneous stuff.
 
@@ -27,7 +28,9 @@ The C++ libraries provide the API needed to make techniques (samplers and denois
 benchmarked and compared using Image Quality Assessment (IQA) metrics.
 The libraries also support adapting renderers, which allow FBKSD to use them as rendering back-ends.
 
-If you have an existing technique that you want to run with FBKSD, take a look at the library [API reference](#api-reference).
+If you have an existing technique that you want to run with FBKSD, take a look at the library [C++ API reference](#c++-api-reference).
+
+If you'd prefer writing your technique in Python, we provide Python bindings as well: [FBKSD Python documentation](https://fbksd.github.io/fbksd/docs/python/latest).
 
 For details about the motivation and system architecture, refer to our paper: [A Framework for Developing and Benchmarking Sampling and Denoising Algorithms for Monte Carlo Rendering](http://www.inf.ufrgs.br/~oliveira/projects/FBKSD/FBKSD_page.html)
 
@@ -46,6 +49,13 @@ For details about the motivation and system architecture, refer to our paper: [A
 * OpenEXR
 * OpenCV 3
 
+For the Python bindings (optional), it also needs the packages:
+
+* libboost-python-dev
+* libboost-numpy-dev
+* python3-dev
+* python3-numpy
+
 After installing the dependencies, clone the repository with the `--recursive-submodules` flag:
 
 ```text
@@ -62,8 +72,14 @@ $ make
 $ sudo make install
 ```
 
-**NOTE**: This repository uses git submodules. Use `--recurse-submodules` when cloning it.
+**Caution**: This repository uses git submodules. Use `--recurse-submodules` when cloning it.
 
+The Python bindings are enabled by default.
+You can disabled it by turning off the `FBKSD_PYTHON` option when running cmake:
+
+```text
+$ cmake -DCMAKE_BUILD_TYPE=Release -DFBKSD_PYTHON=OFF ../
+```
 
 ## Creating a Workspace
 
@@ -259,6 +275,6 @@ When the computation is finished, you can run a `fbksd page serve` to serve the 
 See the `fbksd` CLI build-in help for more info about options commands and options (`fbksd --help`).
 
 
-## API Reference
+## C++ API Reference
 
-For more details about how to develop technique (denoisers, samplers, and IQA metrics) for FBKSD, or add support for new renderers, see the API reference: https://fbksd.github.io/fbksd/docs/2.1.0
+For more details about how to develop technique (denoisers, samplers, and IQA metrics) for FBKSD, or add support for new renderers, see the API reference: https://fbksd.github.io/fbksd/docs/2.2.0

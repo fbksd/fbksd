@@ -1,7 +1,14 @@
 cmake_minimum_required(VERSION 3.5.1 FATAL_ERROR)
-project(fbksd-core VERSION 2.1.0)
+project(fbksd-core VERSION 2.2.0)
 
 option(FBKSD_TESTS "Compile tests." OFF)
+option(FBKSD_PYTHON "Compile python bindings." ON)
+if(FBKSD_PYTHON)
+    set(FBKSD_PYTHON_PATH "lib/python3/dist-packages" CACHE PATH
+        "Path where FBKSD python package will be installed. The given path is appended to CMAKE_INSTALL_PREFIX to form the final location.")
+    message("Python bindins enabled. Will be installed at: " "${CMAKE_INSTALL_PREFIX}/${FBKSD_PYTHON_PATH}")
+endif()
+
 
 # turn on c++14
 set(CMAKE_CXX_STANDARD 14)
@@ -22,6 +29,9 @@ add_subdirectory(src/libbenchmark)
 add_subdirectory(src/libclient)
 add_subdirectory(src/librenderer)
 add_subdirectory(src/libiqa)
+if(FBKSD_PYTHON)
+    add_subdirectory(src/libpython)
+endif()
 add_subdirectory(src/benchmark)
 add_subdirectory(src/iqa)
 add_subdirectory(src/exr2png)

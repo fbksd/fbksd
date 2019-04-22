@@ -20,7 +20,7 @@ import http.server
 import socketserver
 import re
 # local imports
-from fbksd.common import *
+from fbksd_cli.common import *
 
 
 #=============================================

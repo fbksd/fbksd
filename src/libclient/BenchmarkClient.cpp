@@ -46,7 +46,7 @@ namespace
 {
 void startProcess(const QString& execPath, const QStringList& args, QProcess* process)
 {
-    process->start(QFileInfo(execPath).absoluteFilePath(), args);
+    process->start(QFileInfo(execPath).absoluteFilePath(), args, QIODevice::NotOpen);
     if(!process->waitForStarted(-1))
     {
         std::cerr << "Error starting process " << execPath.toStdString() << std::endl;

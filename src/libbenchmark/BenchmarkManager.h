@@ -87,9 +87,7 @@ private:
     SceneInfo onGetSceneInfo();
     int onSetSampleLayout(const SampleLayout& layout);
     TilePkg onEvaluateSamples(bool isSPP, int64_t numSamples);
-    TilePkg onGetNextTile(int64_t prevTileIndex);
     TilePkg onEvaluateInputSamples(bool isSPP, int64_t numSamples);
-    TilePkg onGetNextInputTile(int64_t prevTileIndex, bool prevWasInput);
     void onLastTileConsumed(int64_t prevTileIndex);
     void onSendResult();
 

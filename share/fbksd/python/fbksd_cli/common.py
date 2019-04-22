@@ -14,7 +14,7 @@ import itertools
 import sys
 from subprocess import call, Popen, PIPE, STDOUT
 from contextlib import contextmanager
-from fbksd.model import *
+from fbksd_cli.model import *
 
 
 @contextmanager
@@ -118,6 +118,7 @@ def load_scenes(scenes_file, renderers_dir):
             s.ground_truth = scene['ref-img']
             renderer.scenes.append(s)
             g_scenes[s.id] = s
+            # FIXME: This doesn't work if two scenes from different renderers have the same name.
             g_scenes_names[s.name] = s
 
     return g_scenes, g_scenes_names, g_renderers

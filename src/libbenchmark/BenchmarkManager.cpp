@@ -388,13 +388,6 @@ TilePkg BenchmarkManager::onEvaluateSamples(bool isSPP, int64_t numSamples)
     return tilePkg;
 }
 
-TilePkg BenchmarkManager::onGetNextTile(int64_t prevTileIndex)
-{
-    m_currentExecTime += m_timer.elapsed();
-    m_timer.start();
-    return m_renderClient->getNextTile(prevTileIndex);
-}
-
 TilePkg BenchmarkManager::onEvaluateInputSamples(bool isSPP, int64_t numSamples)
 {
     m_currentExecTime += m_timer.elapsed();
@@ -412,13 +405,6 @@ TilePkg BenchmarkManager::onEvaluateInputSamples(bool isSPP, int64_t numSamples)
 
     m_timer.start();
     return tilePkg;
-}
-
-TilePkg BenchmarkManager::onGetNextInputTile(int64_t prevTileIndex, bool prevWasInput)
-{
-    m_currentExecTime += m_timer.elapsed();
-    m_timer.start();
-    return m_renderClient->getNextInputTile(prevTileIndex, prevWasInput);
 }
 
 void BenchmarkManager::onLastTileConsumed(int64_t prevTileIndex)
@@ -497,10 +483,10 @@ BenchmarkManager::ProcessExitStatus BenchmarkManager::startEventLoop(QProcess *r
 void BenchmarkManager::startProcess(const QString& execPath, const QString& arg, QProcess& process)
 {
     QString logFilename = QFileInfo(execPath).baseName().append(".log");
+    process.setProcessChannelMode(QProcess::MergedChannels);
     process.setStandardOutputFile(logFilename);
-    process.setStandardErrorFile(logFilename);
     process.setWorkingDirectory(QFileInfo(execPath).absolutePath());
-    process.start(QFileInfo(execPath).absoluteFilePath(), {QFileInfo(arg).absoluteFilePath()});
+    process.start(QFileInfo(execPath).absoluteFilePath(), {QFileInfo(arg).absoluteFilePath()}, QIODevice::ReadOnly | QIODevice::Truncate);
     if(!process.waitForStarted(-1))
     {
         qDebug() << "Error starting process " << execPath;
