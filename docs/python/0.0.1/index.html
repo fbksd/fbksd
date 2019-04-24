@@ -161,13 +161,13 @@
 <div class="contents local topic" id="table-of-contents">
 <p class="topic-title first">Table of Contents</p>
 <ul class="simple">
-<li><p><a class="reference internal" href="#introduction" id="id4">Introduction</a></p></li>
-<li><p><a class="reference internal" href="#requirements" id="id5">Requirements</a></p></li>
-<li><p><a class="reference internal" href="#installation" id="id6">Installation</a></p></li>
-<li><p><a class="reference internal" href="#implementing-a-denoising-technique" id="id7">Implementing a Denoising Technique</a></p></li>
-<li><p><a class="reference internal" href="#running-a-technique" id="id8">Running a Technique</a></p></li>
-<li><p><a class="reference internal" href="#performance-considerations" id="id9">Performance Considerations</a></p></li>
-<li><p><a class="reference internal" href="#indices-and-tables" id="id10">Indices and Tables</a></p></li>
+<li><a class="reference internal" href="#introduction" id="id4">Introduction</a></li>
+<li><a class="reference internal" href="#requirements" id="id5">Requirements</a></li>
+<li><a class="reference internal" href="#installation" id="id6">Installation</a></li>
+<li><a class="reference internal" href="#implementing-a-denoising-technique" id="id7">Implementing a Denoising Technique</a></li>
+<li><a class="reference internal" href="#running-a-technique" id="id8">Running a Technique</a></li>
+<li><a class="reference internal" href="#performance-considerations" id="id9">Performance Considerations</a></li>
+<li><a class="reference internal" href="#indices-and-tables" id="id10">Indices and Tables</a></li>
 </ul>
 </div>
 <div class="section" id="introduction">
@@ -182,10 +182,10 @@ and leverage the increasingly popular machine learning frameworks.</p>
 <p>This package supports only Python 3.
 To build it on Ubuntu 18.04, besides the dependencies for the main <a class="reference external" href="https://github.com/fbksd/fbksd#dependencies">FBKSD C++ library</a>, you’ll need the packages:</p>
 <ul class="simple">
-<li><p>libboost-python-dev</p></li>
-<li><p>libboost-numpy-dev</p></li>
-<li><p>python3-dev</p></li>
-<li><p>python3-numpy</p></li>
+<li>libboost-python-dev</li>
+<li>libboost-numpy-dev</li>
+<li>python3-dev</li>
+<li>python3-numpy</li>
 </ul>
 </div>
 <div class="section" id="installation">
@@ -202,8 +202,8 @@ You can change this path using the <code class="docutils literal notranslate"><s
 </div>
 <p>The path passed to <code class="docutils literal notranslate"><span class="pre">FBKSD_PYTHON_PATH</span></code> is appended to the <code class="docutils literal notranslate"><span class="pre">CMAKE_INSTALL_PREFIX</span></code> value to form the final location.</p>
 <div class="admonition attention">
-<p class="admonition-title">Attention</p>
-<p>If the path passed to <code class="docutils literal notranslate"><span class="pre">FBKSD_PYTHON_PATH</span></code> doesn’t start with a <code class="docutils literal notranslate"><span class="pre">/</span></code>, cmake automatically prepends the current directory path to it.</p>
+<p class="first admonition-title">Attention</p>
+<p class="last">If the path passed to <code class="docutils literal notranslate"><span class="pre">FBKSD_PYTHON_PATH</span></code> doesn’t start with a <code class="docutils literal notranslate"><span class="pre">/</span></code>, cmake automatically prepends the current directory path to it.</p>
 </div>
 </div>
 <div class="section" id="implementing-a-denoising-technique">
@@ -211,12 +211,12 @@ You can change this path using the <code class="docutils literal notranslate"><s
 <p>The <a class="reference internal" href="client.html#module-fbksd.client" title="fbksd.client"><code class="xref py py-mod docutils literal notranslate"><span class="pre">fbksd.client</span></code></a> module supports creating non-adaptive denoising techniques.</p>
 <p>The workflow for is basically the same as in the <a class="reference external" href="https://fbksd.github.io/fbksd/docs/latest/">C++ API</a>:</p>
 <ol class="arabic simple">
-<li><p>create a <a class="reference internal" href="client.html#fbksd.client.BenchmarkClient" title="fbksd.client.BenchmarkClient"><code class="xref py py-class docutils literal notranslate"><span class="pre">BenchmarkClient</span></code></a> object;</p></li>
-<li><p>request information about the scene (<a class="reference internal" href="client.html#fbksd.client.BenchmarkClient.get_scene_info" title="fbksd.client.BenchmarkClient.get_scene_info"><code class="xref py py-func docutils literal notranslate"><span class="pre">get_scene_info()</span></code></a>);</p></li>
-<li><p>setup the sample layout (<code class="xref py py-func docutils literal notranslate"><span class="pre">get_sample_layout()</span></code>);</p></li>
-<li><p>request the samples (<a class="reference internal" href="client.html#fbksd.client.BenchmarkClient.evaluate_samples" title="fbksd.client.BenchmarkClient.evaluate_samples"><code class="xref py py-func docutils literal notranslate"><span class="pre">evaluate_samples()</span></code></a>);</p></li>
-<li><p>do your black magic to reconstruct the result image, saving it to the result image buffer;</p></li>
-<li><p>send the result (<a class="reference internal" href="client.html#fbksd.client.BenchmarkClient.send_result" title="fbksd.client.BenchmarkClient.send_result"><code class="xref py py-func docutils literal notranslate"><span class="pre">send_result()</span></code></a>).</p></li>
+<li>create a <a class="reference internal" href="client.html#fbksd.client.BenchmarkClient" title="fbksd.client.BenchmarkClient"><code class="xref py py-class docutils literal notranslate"><span class="pre">BenchmarkClient</span></code></a> object;</li>
+<li>request information about the scene (<a class="reference internal" href="client.html#fbksd.client.BenchmarkClient.get_scene_info" title="fbksd.client.BenchmarkClient.get_scene_info"><code class="xref py py-func docutils literal notranslate"><span class="pre">get_scene_info()</span></code></a>);</li>
+<li>setup the sample layout (<code class="xref py py-func docutils literal notranslate"><span class="pre">get_sample_layout()</span></code>);</li>
+<li>request the samples (<a class="reference internal" href="client.html#fbksd.client.BenchmarkClient.evaluate_samples" title="fbksd.client.BenchmarkClient.evaluate_samples"><code class="xref py py-func docutils literal notranslate"><span class="pre">evaluate_samples()</span></code></a>);</li>
+<li>do your black magic to reconstruct the result image, saving it to the result image buffer;</li>
+<li>send the result (<a class="reference internal" href="client.html#fbksd.client.BenchmarkClient.send_result" title="fbksd.client.BenchmarkClient.send_result"><code class="xref py py-func docutils literal notranslate"><span class="pre">send_result()</span></code></a>).</li>
 </ol>
 <p>The example below shows a simple box filter.</p>
 <div class="literal-block-wrapper docutils container" id="id1">
@@ -255,8 +255,8 @@ You can change this path using the <code class="docutils literal notranslate"><s
 </div>
 </div>
 <div class="admonition note">
-<p class="admonition-title">Note</p>
-<p>We included the shebang <code class="docutils literal notranslate"><span class="pre">#!/usr/bin/env</span> <span class="pre">python3</span></code> to allow the file to be executed directly.
+<p class="first admonition-title">Note</p>
+<p class="last">We included the shebang <code class="docutils literal notranslate"><span class="pre">#!/usr/bin/env</span> <span class="pre">python3</span></code> to allow the file to be executed directly.
 FBKSD doesn’t know this is a python script, and will try to execute it like any other technique.</p>
 </div>
 </div>
@@ -275,8 +275,8 @@ FBKSD doesn’t know this is a python script, and will try to execute it like an
 </div>
 </div>
 <div class="admonition note">
-<p class="admonition-title">Note</p>
-<p>The <code class="docutils literal notranslate"><span class="pre">&quot;short_name&quot;</span></code> value, by default, should be the same as the executable name, that’s why we didn’t include a <code class="docutils literal notranslate"><span class="pre">.py</span></code> extension in our <code class="docutils literal notranslate"><span class="pre">PyBox</span></code> Python file.</p>
+<p class="first admonition-title">Note</p>
+<p class="last">The <code class="docutils literal notranslate"><span class="pre">&quot;short_name&quot;</span></code> value, by default, should be the same as the executable name, that’s why we didn’t include a <code class="docutils literal notranslate"><span class="pre">.py</span></code> extension in our <code class="docutils literal notranslate"><span class="pre">PyBox</span></code> Python file.</p>
 </div>
 <div class="section" id="running-a-technique-directly">
 <h3>Running a Technique Directly<a class="headerlink" href="#running-a-technique-directly" title="Permalink to this headline">¶</a></h3>
@@ -302,8 +302,8 @@ The Python API also supports this feature, exactly <a class="reference external"
 <div class="section" id="indices-and-tables">
 <h2><a class="toc-backref" href="#id10">Indices and Tables</a><a class="headerlink" href="#indices-and-tables" title="Permalink to this headline">¶</a></h2>
 <ul class="simple">
-<li><p><a class="reference internal" href="genindex.html"><span class="std std-ref">Index</span></a></p></li>
-<li><p><a class="reference internal" href="py-modindex.html"><span class="std std-ref">Module Index</span></a></p></li>
+<li><a class="reference internal" href="genindex.html"><span class="std std-ref">Index</span></a></li>
+<li><a class="reference internal" href="py-modindex.html"><span class="std std-ref">Module Index</span></a></li>
 </ul>
 </div>
 </div>

@@ -179,24 +179,28 @@
 <dd><p>Request samples.</p>
 <p>The samples are computed by the renderer and sent in tiles. For each tile, the consumer callback
 function is called so you can consume the samples.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>spp</strong> – number of samples per pixel to evaluate.</p></li>
-<li><p><strong>consumer</strong> – <p>Consumer callback function.
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first last simple">
+<li><strong>spp</strong> – number of samples per pixel to evaluate.</li>
+<li><strong>consumer</strong> – <p>Consumer callback function.
 The callback should accept two parameters: <code class="docutils literal notranslate"><span class="pre">tile</span></code> and <code class="docutils literal notranslate"><span class="pre">offset</span></code>.</p>
 <p>The <code class="docutils literal notranslate"><span class="pre">tile</span></code> is a <a class="reference external" href="https://docs.scipy.org/doc/numpy/reference/generated/numpy.ndarray.html#numpy.ndarray">numpy.ndarray</a> containing the tile data. It has 4 dimensions, in this order:
 <code class="docutils literal notranslate"><span class="pre">height</span></code>, <code class="docutils literal notranslate"><span class="pre">width</span></code>, <code class="docutils literal notranslate"><span class="pre">spp</span></code>, and <code class="docutils literal notranslate"><span class="pre">sample_size</span></code>, where <code class="docutils literal notranslate"><span class="pre">sample_size</span></code> is the number of components
 of the sample specified in the <a class="reference internal" href="#fbksd.client.BenchmarkClient.set_sample_layout" title="fbksd.client.BenchmarkClient.set_sample_layout"><code class="xref py py-func docutils literal notranslate"><span class="pre">set_sample_layout()</span></code></a> method.</p>
 <p>The <code class="docutils literal notranslate"><span class="pre">offset</span></code> is a tuple containing the <span class="math notranslate nohighlight">\((x, y)\)</span> pixel coordinates of the result image, corresponding to the    upper-left corner of the tile.</p>
 <div class="admonition note">
-<p class="admonition-title">Note</p>
-<p>Your callback function should return as fast as possible.       So, try to avoid raw loops when consuming the samples whenever possible.</p>
+<p class="first admonition-title">Note</p>
+<p class="last">Your callback function should return as fast as possible.       So, try to avoid raw loops when consuming the samples whenever possible.</p>
 </div>
-</p></li>
+</li>
 </ul>
-</dd>
-</dl>
+</td>
+</tr>
+</tbody>
+</table>
 </dd></dl>
 
 <dl class="method">
@@ -204,24 +208,29 @@ of the sample specified in the <a class="reference internal" href="#fbksd.client
 <code class="descname">get_result_buffer</code><span class="sig-paren">(</span><em>(BenchmarkClient)self</em><span class="sig-paren">)</span> &#x2192; numpy.ndarray :<a class="headerlink" href="#fbksd.client.BenchmarkClient.get_result_buffer" title="Permalink to this definition">¶</a></dt>
 <dd><p>Returns a pointer to the buffer where the result image is stored.</p>
 <p>The user should write the final reconstructed image to this buffer before calling <a class="reference internal" href="#fbksd.client.BenchmarkClient.send_result" title="fbksd.client.BenchmarkClient.send_result"><code class="xref py py-func docutils literal notranslate"><span class="pre">send_result()</span></code></a>.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Returns</dt>
-<dd class="field-odd"><p>A RGB image as a <a class="reference external" href="https://docs.scipy.org/doc/numpy/reference/generated/numpy.ndarray.html#numpy.ndarray">numpy.ndarray</a> with shape <code class="docutils literal notranslate"><span class="pre">(height,</span> <span class="pre">width,</span> <span class="pre">3)</span></code> .</p>
-</dd>
-</dl>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Returns:</th><td class="field-body">A RGB image as a <a class="reference external" href="https://docs.scipy.org/doc/numpy/reference/generated/numpy.ndarray.html#numpy.ndarray">numpy.ndarray</a> with shape <code class="docutils literal notranslate"><span class="pre">(height,</span> <span class="pre">width,</span> <span class="pre">3)</span></code> .</td>
+</tr>
+</tbody>
+</table>
 </dd></dl>
 
 <dl class="method">
 <dt id="fbksd.client.BenchmarkClient.get_scene_info">
 <code class="descname">get_scene_info</code><span class="sig-paren">(</span><em>(BenchmarkClient)</em><span class="sig-paren">)</span> &#x2192; SceneInfo :<a class="headerlink" href="#fbksd.client.BenchmarkClient.get_scene_info" title="Permalink to this definition">¶</a></dt>
-<dd><dl class="field-list simple">
-<dt class="field-odd">Returns</dt>
-<dd class="field-odd"><p>Returns information about the scene being rendered.</p>
-</dd>
-<dt class="field-even">Return type</dt>
-<dd class="field-even"><p><a class="reference internal" href="#fbksd.client.SceneInfo" title="fbksd.client.SceneInfo"><code class="xref py py-class docutils literal notranslate"><span class="pre">SceneInfo</span></code></a>.</p>
-</dd>
-</dl>
+<dd><table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Returns:</th><td class="field-body">Returns information about the scene being rendered.</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Return type:</th><td class="field-body"><a class="reference internal" href="#fbksd.client.SceneInfo" title="fbksd.client.SceneInfo"><code class="xref py py-class docutils literal notranslate"><span class="pre">SceneInfo</span></code></a>.</td>
+</tr>
+</tbody>
+</table>
 </dd></dl>
 
 <dl class="method">
@@ -235,13 +244,16 @@ of the sample specified in the <a class="reference internal" href="#fbksd.client
 <code class="descname">set_sample_layout</code><span class="sig-paren">(</span><em>(BenchmarkClient)self</em>, <em>(list)layout</em><span class="sig-paren">)</span> &#x2192; None :<a class="headerlink" href="#fbksd.client.BenchmarkClient.set_sample_layout" title="Permalink to this definition">¶</a></dt>
 <dd><p>Sets the sample layout.</p>
 <p>The layout is the way to inform the FBKSD server what data your technique requires for each sample, and how the data should be laid out in memory. Common data includes, for example, color RGB and (x,y) image plane position.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
-<dd class="field-odd"><p><strong>layout</strong> (<em>list</em>) – List of sample components.
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>layout</strong> (<em>list</em>) – List of sample components.
 A component can be a string (Ex: <code class="docutils literal notranslate"><span class="pre">'COLOR_R'</span></code>), or a pair with a string and a number indicating    the enumeration value (Ex: <code class="docutils literal notranslate"><span class="pre">('NORMAL_X',</span> <span class="pre">1)</span></code>, indication the x normal value for the second intersection point).
-The list of available components can be found in the <a class="reference external" href="https://fbksd.github.io/fbksd/docs/latest/classfbksd_1_1SampleLayout.html#details">C++ API reference</a>.</p>
-</dd>
-</dl>
+The list of available components can be found in the <a class="reference external" href="https://fbksd.github.io/fbksd/docs/latest/classfbksd_1_1SampleLayout.html#details">C++ API reference</a>.</td>
+</tr>
+</tbody>
+</table>
 </dd></dl>
 
 </dd></dl>
