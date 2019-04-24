@@ -112,6 +112,7 @@ html_static_path = ['static']
 #     ]
 # }
 
+html4_writer = True
 html_logo = 'static/logo.png'
 html_favicon = 'static/favicon.png' 
 html_copy_source = False
