@@ -1,4 +1,4 @@
-# FBKSD 2.2.0 API
+# FBKSD API
 
 ## Table of Contents
 

@@ -64,7 +64,7 @@ void BenchmarkClient_evaluateSamples(BenchmarkClient& self, int spp, bp::object 
     });
 }
 
-void BenchmarkClient_setSampleLayout(BenchmarkClient& self, bp::list list)
+void BenchmarkClient_setSampleLayout(BenchmarkClient& self, bp::list list, float roughness = 0.1f)
 {
     SampleLayout layout;
     auto len = bp::len(list);
@@ -83,6 +83,7 @@ void BenchmarkClient_setSampleLayout(BenchmarkClient& self, bp::list list)
             }
         }
     }
+    layout.setRoughnessThreshold(roughness);
     self.setSampleLayout(layout);
 }
 
@@ -125,7 +126,7 @@ BOOST_PYTHON_MODULE(client)
         .def("get_scene_info", &BenchmarkClient::getSceneInfo, args(""),
              ":return: Returns information about the scene being rendered.\n"
              ":rtype: :class:`~SceneInfo`.")
-        .def("set_sample_layout", &BenchmarkClient_setSampleLayout, args("self", "layout"),
+        .def("set_sample_layout", &BenchmarkClient_setSampleLayout, (arg("self"), arg("layout"), arg("roughness") = 0.1f),
              "Sets the sample layout.\n\n"
              "The layout is the way to inform the FBKSD server "
              "what data your technique requires for each sample, and how the data should "
@@ -134,7 +135,8 @@ BOOST_PYTHON_MODULE(client)
              ":param list layout: List of sample components.\n"
              "    A component can be a string (Ex: ``'COLOR_R'``), or a pair with a string and a number indicating"
              "    the enumeration value (Ex: ``('NORMAL_X', 1)``, indication the x normal value for the second intersection point).\n"
-             "    The list of available components can be found in the `C++ API reference <https://fbksd.github.io/fbksd/docs/latest/classfbksd_1_1SampleLayout.html#details>`__.\n")
+             "    The list of available components can be found in the `C++ API reference <https://fbksd.github.io/fbksd/docs/latest/classfbksd_1_1SampleLayout.html#details>`__.\n"
+             ":param float roughness: Beckmann roughness threshold used to decompose the diffuse sample radiance values.")
         .def("evaluate_samples", &BenchmarkClient_evaluateSamples, args("self", "spp", "consumer"),
              "Request samples.\n\n"
              "The samples are computed by the renderer and sent in tiles. For each tile, the consumer callback\n"

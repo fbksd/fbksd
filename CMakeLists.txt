@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.5.1 FATAL_ERROR)
-project(fbksd-core VERSION 2.2.0)
+project(fbksd-core VERSION 2.3.0)
 
 option(FBKSD_TESTS "Compile tests." OFF)
 option(FBKSD_PYTHON "Compile python bindings." ON)

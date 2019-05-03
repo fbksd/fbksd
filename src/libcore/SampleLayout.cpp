@@ -88,6 +88,16 @@ bool SampleLayout::hasInput() const
     return false;
 }
 
+void SampleLayout::setRoughnessThreshold(float a)
+{
+    m_roughness = a;
+}
+
+float SampleLayout::getRoughnessThreshold() const
+{
+    return m_roughness;
+}
+
 bool SampleLayout::isValid(const std::set<std::string> &reference) const
 {
     std::set<std::string> counter;

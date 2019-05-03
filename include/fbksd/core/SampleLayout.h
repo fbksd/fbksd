@@ -40,30 +40,33 @@ namespace fbksd
     | LIGHT_X           |
     | LIGHT_Y           |
 
-    | Features            | Enumerable |
-    | --------------------|------------|
-    | COLOR_R             | no         |
-    | COLOR_G             | no         |
-    | COLOR_B             | no         |
-    | DIRECT_LIGHT_R      | no         |
-    | DIRECT_LIGHT_G      | no         |
-    | DIRECT_LIGHT_B      | no         |
-    | DEPTH               | no         |
-    | NORMAL_X            | yes (0, 1) |
-    | NORMAL_Y            | yes (0, 1) |
-    | NORMAL_Z            | yes (0, 1) |
-    | TEXTURE_COLOR_R     | yes (0, 1) |
-    | TEXTURE_COLOR_G     | yes (0, 1) |
-    | TEXTURE_COLOR_B     | yes (0, 1) |
-    | WORLD_X_NS          | no         |
-    | WORLD_Y_NS          | no         |
-    | WORLD_Z_NS          | no         |
-    | NORMAL_X_NS         | no         |
-    | NORMAL_Y_NS         | no         |
-    | NORMAL_Z_NS         | no         |
-    | TEXTURE_COLOR_R_NS  | no         |
-    | TEXTURE_COLOR_G_NS  | no         |
-    | TEXTURE_COLOR_B_NS  | no         |
+    | Features            | Enumerable | Description                                                         |
+    | --------------------|------------|---------------------------------------------------------------------|
+    | COLOR_R             | no         | Final sample radiance value                                         |
+    | COLOR_G             | no         |                                                                     |
+    | COLOR_B             | no         |                                                                     |
+    | DIRECT_LIGHT_R      | no         | Incident direct light value on the first intersection point         |
+    | DIRECT_LIGHT_G      | no         |                                                                     |
+    | DIRECT_LIGHT_B      | no         |                                                                     |
+    | DEPTH               | no         | Depth of the first intersection point                               |
+    | NORMAL_X            | yes (0, 1) | World normal                                                        |
+    | NORMAL_Y            | yes (0, 1) |                                                                     |
+    | NORMAL_Z            | yes (0, 1) |                                                                     |
+    | TEXTURE_COLOR_R     | yes (0, 1) | Texture value (albedo)                                              |
+    | TEXTURE_COLOR_G     | yes (0, 1) |                                                                     |
+    | TEXTURE_COLOR_B     | yes (0, 1) |                                                                     |
+    | WORLD_X_NS          | no         | World position on the first non-specular intersection point         |
+    | WORLD_Y_NS          | no         |                                                                     |
+    | WORLD_Z_NS          | no         |                                                                     |
+    | NORMAL_X_NS         | no         | World normal on the first non-specular intersection point           |
+    | NORMAL_Y_NS         | no         |                                                                     |
+    | NORMAL_Z_NS         | no         |                                                                     |
+    | TEXTURE_COLOR_R_NS  | no         | Texture value (albedo) on the first non-specular intersection point |
+    | TEXTURE_COLOR_G_NS  | no         |                                                                     |
+    | TEXTURE_COLOR_B_NS  | no         |                                                                     |
+    | DIFFUSE_COLOR_R     | no         | Diffuse component of the final sample radiance                      |
+    | DIFFUSE_COLOR_G     | no         |                                                                     |
+    | DIFFUSE_COLOR_B     | no         |                                                                     |
 
     When implementing adaptive techniques, you may want to generate your own random parameters. In this case,
     random parameters can be given an optional SampleLayout::ElementIO flag, specifying the element as input
@@ -92,7 +95,6 @@ public:
         OUTPUT = false,
         INPUT = true,
     };
-
 
     /**
      * \brief Adds an element to the sample layout.
@@ -141,7 +143,27 @@ public:
      */
     bool hasInput() const;
 
-    MSGPACK_DEFINE_ARRAY(parameters)
+    /**
+     * @brief Sets the Beckmann roughness threshold used to decompose the diffuse sample radiance values.
+     *
+     * The features `DIFFUSE_COLOR_{R, G, B}`, contain the diffuse part of the final sample radiance values (`COLOR_{R,G,B}`).
+     * A light-surface interaction is considered diffuse when the Beckmann roughness (alpha value) of the material
+     * is >= than the threshold.
+     *
+     * Increasing the threshold causes less energy to be included in the diffuse color features.
+     *
+     * @arg a Beckmann roughness value in the [0, inf) range.
+     */
+    void setRoughnessThreshold(float a);
+
+    /**
+     * @brief Returns the Beckmann roughness threshold value.
+     *
+     * The default value is 0.1.
+     */
+    float getRoughnessThreshold() const;
+
+    MSGPACK_DEFINE_ARRAY(parameters, m_roughness)
 private:
     friend class SampleAdapter;
     friend class SampleBuffer;
@@ -167,6 +189,7 @@ private:
         MSGPACK_DEFINE_ARRAY(name, number, io)
     };
     std::vector<ParameterEntry> parameters;
+    float m_roughness = 0.1f;
 };
 
 } // namespace fbksd

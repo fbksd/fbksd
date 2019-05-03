@@ -80,6 +80,9 @@ enum Feature
     TEXTURE_COLOR_R_NS,
     TEXTURE_COLOR_G_NS,
     TEXTURE_COLOR_B_NS,
+    DIFFUSE_COLOR_R,
+    DIFFUSE_COLOR_G,
+    DIFFUSE_COLOR_B,
 
     NUM_FEATURES
 };
@@ -128,7 +131,10 @@ inline std::set<std::string> getAllElements()
         "NORMAL_Z_NS",
         "TEXTURE_COLOR_R_NS",
         "TEXTURE_COLOR_G_NS",
-        "TEXTURE_COLOR_B_NS"
+        "TEXTURE_COLOR_B_NS",
+        "DIFFUSE_COLOR_R",
+        "DIFFUSE_COLOR_G",
+        "DIFFUSE_COLOR_B"
     };
 }
 
@@ -205,8 +211,10 @@ inline bool stringToFeature(const std::string& name, Feature* elel)
                                                        {"NORMAL_Z_NS", NORMAL_Z_NS},
                                                        {"TEXTURE_COLOR_R_NS", TEXTURE_COLOR_R_NS},
                                                        {"TEXTURE_COLOR_G_NS", TEXTURE_COLOR_G_NS},
-                                                       {"TEXTURE_COLOR_B_NS", TEXTURE_COLOR_B_NS}};
-
+                                                       {"TEXTURE_COLOR_B_NS", TEXTURE_COLOR_B_NS},
+                                                       {"DIFFUSE_COLOR_R", DIFFUSE_COLOR_R},
+                                                       {"DIFFUSE_COLOR_G", DIFFUSE_COLOR_G},
+                                                       {"DIFFUSE_COLOR_B", DIFFUSE_COLOR_B}};
     auto e = map.find(name);
     if(e != map.end())
     {
