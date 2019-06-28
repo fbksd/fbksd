@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.3.0
+ - Add support for DIFFUSE_COLOR_{R,G,B} features;
+ - Improved API documentation.
+
 ## 2.2.0
 - Add Python bindings for the `fbksd-client` library, allowing to develop techniques in Python (only non-adaptive denoisers for now);
 - Fix API documentation for the `SampleLayout` and `SceneInfo` classes.

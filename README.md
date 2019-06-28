@@ -28,10 +28,6 @@ The C++ libraries provide the API needed to make techniques (samplers and denois
 benchmarked and compared using Image Quality Assessment (IQA) metrics.
 The libraries also support adapting renderers, which allow FBKSD to use them as rendering back-ends.
 
-If you have an existing technique that you want to run with FBKSD, take a look at the library [C++ API reference](#c++-api-reference).
-
-If you'd prefer writing your technique in Python, we provide Python bindings as well: [FBKSD Python documentation](https://fbksd.github.io/fbksd/docs/python/latest).
-
 For details about the motivation and system architecture, refer to our paper: [A Framework for Developing and Benchmarking Sampling and Denoising Algorithms for Monte Carlo Rendering](http://www.inf.ufrgs.br/~oliveira/projects/FBKSD/FBKSD_page.html)
 
 
@@ -93,7 +89,7 @@ $ mkdir workspace && cd workspace
 $ fbksd init
 ```
 
-To get you started, we provide a package containing several techniques, renderers, and scenes in a [separate repository](https://github.com/fbksd/fbksd-package/tree/fbksd-2.0.0).
+To get you started, we provide a package containing several techniques, renderers, and scenes in a [separate repository](https://github.com/fbksd/fbksd-package/tree/fbksd-2.3.0).
 This package should be installed in your workspace, following the instructions on the fbksd-package repository.
 
 After the package is installed in your workspace, you can list the filters, samplers and scenes using the `filters`, `samplers`, and `scenes` subcommands. Ex:
@@ -275,6 +271,10 @@ When the computation is finished, you can run a `fbksd page serve` to serve the 
 See the `fbksd` CLI build-in help for more info about options commands and options (`fbksd --help`).
 
 
-## C++ API Reference
+## API Reference
 
-For more details about how to develop technique (denoisers, samplers, and IQA metrics) for FBKSD, or add support for new renderers, see the API reference: https://fbksd.github.io/fbksd/docs/2.2.0
+For more details about how to develop technique (denoisers, samplers, and IQA metrics) for FBKSD, or add support for new renderers, see the C++ API reference: https://fbksd.github.io/fbksd/docs/latest.
+We also provide Python bindings for denoising and sampling techniques: https://fbksd.github.io/fbksd/docs/python/latest.
+
+To see the reference for a specific version, replace `latest` in the link by the version number.
+Ex: https://fbksd.github.io/fbksd/docs/2.3.0
